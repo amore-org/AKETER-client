@@ -2,6 +2,8 @@
 
 CRM 메시지 자동 제작을 위한 AI Agent 클라이언트 애플리케이션입니다.
 
+# PUSH 권한 테스트
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
