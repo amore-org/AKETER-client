@@ -1,10 +1,13 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import { StyledEngineProvider, ThemeProvider } from '@mui/material/styles';
+import ReactDOM from 'react-dom/client';
+import App from './App.tsx';
+import { amoreTheme } from './styles/theme';
+import './index.css';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <StyledEngineProvider injectFirst>
+    <ThemeProvider theme={amoreTheme}>
+      <App />
+    </ThemeProvider>
+  </StyledEngineProvider>
+);
