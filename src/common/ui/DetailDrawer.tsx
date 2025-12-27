@@ -7,6 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { amoreTokens } from '../../styles/theme';
 import { StatusChip } from './Chip';
 import type { TableRowData } from './DataTable';
+import { getStatusLabel } from './statusLabels';
 
 const DrawerWrapper = styled(Box)`
   width: 30rem; /* 480px */
@@ -69,7 +70,7 @@ export const DetailDrawer = ({ open, onClose, data }: DetailDrawerProps) => {
             <Label>상태</Label>
             <StatusChip 
               status={data.status} 
-              label={data.status === 'success' ? '발송 완료' : '대기 중'} 
+              label={getStatusLabel(data.status)} 
             />
           </InfoSection>
 

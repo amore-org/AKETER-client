@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { amoreTokens } from '../../styles/theme';
 import { StatusChip, type ChipStatus } from './Chip';
+import { statusLabelMap } from './statusLabels';
 
 /**
  * 테이블 데이터 구조 정의 (TypeScript)
@@ -49,14 +50,6 @@ const StyledTd = styled(TableCell)`
 `;
 
 export const DataTable = ({ rows }: DataTableProps) => {
-  const statusLabelMap: Record<ChipStatus, string> = {
-    success: '발송 완료',
-    warning: '확인 필요',
-    error: '발송 취소',
-    info: '발송 대기',
-    default: '미정',
-  };
-
   return (
     <StyledTableContainer>
       <Table sx={{ minWidth: '50rem' }} aria-label="today schedule table">
