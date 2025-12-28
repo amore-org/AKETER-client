@@ -48,3 +48,6 @@ $RECYCLE.BIN/
 *.ntvs*
 *.njsproj
 *.sln
+
+zsh-autosuggestions
+*.zsh
