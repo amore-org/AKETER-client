@@ -4,6 +4,9 @@ dist/
 dist-ssr/
 *.local
 
+# Local-only embedded repo (avoid stash/merge noise)
+zsh-autosuggestions/
+
 # Environment Variables (CRITICAL)
 .env
 .env.*
