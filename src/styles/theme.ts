@@ -59,6 +59,12 @@ export const amoreTokens = {
       regular: 400, medium: 500, semibold: 600, bold: 700,
     }
   }
+  ,
+  // 4. 라운딩 (Border Radius)
+  radius: {
+    base: '0.5rem', // 전체 컴포넌트 기본 라운딩
+    drawerRight: '0.5rem 0 0 0.5rem', // 우측 Drawer(좌측만 라운딩)
+  },
 };
 
 /**
@@ -103,14 +109,14 @@ export const amoreTheme = createTheme({
   spacing: 8,
 
   shape: {
-    borderRadius: 0,
+    borderRadius: 8, // 0.5rem (8px)
   },
 
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: '0.125rem', // 2px
+          borderRadius: '0.5rem',
           padding: '0.5rem 1.25rem', // 8px 20px
         },
       },
