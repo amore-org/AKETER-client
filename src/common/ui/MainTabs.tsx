@@ -1,5 +1,4 @@
 // src/common/ui/MainTabs.tsx
-import { useState } from 'react';
 import styled from 'styled-components';
 import { Box, Tabs, Tab } from '@mui/material';
 import { amoreTokens } from '../../styles/theme';
@@ -45,11 +44,25 @@ const StyledTab = styled(Tab)`
   }
 `;
 
-export const MainTabs = () => {
-  const [value, setValue] = useState(0);
+export type MainTabItem = {
+  label: string;
+};
 
+type MainTabsProps = {
+  value: number;
+  onChange: (newValue: number) => void;
+  tabs?: MainTabItem[];
+  ariaLabel?: string;
+};
+
+export const MainTabs = ({
+  value,
+  onChange,
+  tabs = [{ label: '오늘 발송 예약' }, { label: '페르소나 유형' }, { label: '발송 추이 확인' }],
+  ariaLabel = 'crm main tabs',
+}: MainTabsProps) => {
   const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setValue(newValue);
+    onChange(newValue);
   };
 
   return (
@@ -58,7 +71,7 @@ export const MainTabs = () => {
         <Tabs 
           value={value} 
           onChange={handleChange}
-          aria-label="crm main tabs"
+          aria-label={ariaLabel}
           sx={{ minHeight: amoreTokens.spacing(6) }}
           // 인디케이터(선) 스타일
           TabIndicatorProps={{
@@ -68,9 +81,9 @@ export const MainTabs = () => {
             }
           }}
         >
-          <StyledTab label="오늘 발송 예약" />
-          <StyledTab label="페르소나 유형" />
-          <StyledTab label="발송 추이 확인" />
+          {tabs.map((tab, idx) => (
+            <StyledTab key={`${tab.label}-${idx}`} label={tab.label} />
+          ))}
         </Tabs>
       </Box>
     </TabsContainer>

@@ -2,190 +2,697 @@
 import styled from 'styled-components';
 import { 
   Table, TableBody, TableCell, TableContainer, 
-  TableHead, TableRow
+  TableHead,
+  TableRow,
+  Box,
+  Stack,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Button,
+  Typography,
+  IconButton,
+  Popover,
+  Divider,
+  Tooltip,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import { useMemo, useState, type ChangeEvent, type MouseEvent } from 'react';
 import { amoreTokens } from '../../styles/theme';
 import { StatusChip, type ChipStatus } from './Chip';
+import { statusLabelMap } from './statusLabels';
+import { Pagination } from './Pagination';
+import type { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import EventIcon from '@mui/icons-material/Event';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import type { TableRowData } from '../../api/types';
+import { Button as AppButton } from './Button';
 
-// 1. 테이블 컨테이너: 배경색과 테두리 정의
+/**
+ * 테이블 데이터 구조 정의 (TypeScript)
+ */
+export type { TableRowData } from '../../api/types';
+
+export type DataTableVariant = 'today' | 'trend';
+
+interface DataTableProps {
+  rows: TableRowData[];
+  onRowClick?: (row: TableRowData) => void;
+  onPersonaClick?: (row: TableRowData) => void;
+  onProductClick?: (row: TableRowData) => void;
+  onChangeScheduleClick?: (row: TableRowData) => void;
+  pageSize?: number;
+  variant?: DataTableVariant;
+}
+
+type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'content';
+
 const StyledTableContainer = styled(TableContainer)`
-  border: 1px solid ${amoreTokens.colors.navy[100]};
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background-color: ${amoreTokens.colors.common.white};
+  && {
+    border: 1px solid ${amoreTokens.colors.navy[100]};
+    border-radius: ${amoreTokens.radius.base};
+    box-shadow: none;
+    background-color: ${amoreTokens.colors.common.white};
+  }
 `;
 
 // 2. 헤더 셀 스타일: Navy-50 배경에 Gray-900 텍스트
 const StyledTh = styled(TableCell)`
-  background-color: ${amoreTokens.colors.navy[50]} !important;
-  color: ${amoreTokens.colors.gray[900]} !important;
-  font-weight: ${amoreTokens.typography.weight.bold} !important;
-  font-size: ${amoreTokens.typography.size.body2} !important;
-  padding: 1rem !important;
-  border-bottom: 2px solid ${amoreTokens.colors.navy[100]} !important;
+  && {
+    background-color: ${amoreTokens.colors.navy[50]};
+    color: ${amoreTokens.colors.gray[900]};
+    font-weight: ${amoreTokens.typography.weight.bold};
+    font-size: ${amoreTokens.typography.size.body2};
+    padding: 1rem;
+    border-bottom: 2px solid ${amoreTokens.colors.navy[100]};
+    white-space: nowrap;
+  }
 `;
 
 // 3. 본문 셀 스타일: Gray-700 텍스트와 세밀한 여백
 const StyledTd = styled(TableCell)`
-  color: ${amoreTokens.colors.gray[700]} !important;
-  font-size: ${amoreTokens.typography.size.body2} !important;
-  padding: 0.875rem 1rem !important;
-  border-bottom: 1px solid ${amoreTokens.colors.gray[100]} !important;
-`;
-
-// 4. 행(Row) 호버 효과: 마우스 올리면 부드러운 블루 배경
-const StyledRow = styled(TableRow)`
-  transition: background-color 0.2s ease;
-  cursor: pointer;
-  &:hover {
-    background-color: ${amoreTokens.colors.blue[50]} !important;
+  && {
+    color: ${amoreTokens.colors.gray[700]};
+    font-size: ${amoreTokens.typography.size.body2};
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid ${amoreTokens.colors.gray[100]};
   }
 `;
 
-// 5. 상태 라벨 매핑
-const statusLabelMap: Record<ChipStatus, string> = {
-  success: '발송 완료',
-  warning: '확인 필요',
-  error: '발송 취소',
-  info: '발송 대기',
-  default: '미정',
-};
+const StyledRow = styled(TableRow)<{ $clickable?: boolean }>`
+  transition: background-color 0.2s ease;
+  cursor: ${({ $clickable }) => ($clickable ? 'pointer' : 'default')};
+  &:hover {
+    background-color: ${({ $clickable }) => ($clickable ? amoreTokens.colors.blue[50] : 'inherit')} !important;
+  }
+`;
 
-type DataRow = {
-  id: number;
-  persona: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:mm
-  product: string;
-  message: string;
-  status: ChipStatus;
-};
-// 샘플 데이터
-const rows: DataRow[] = [
-  {
-    id: 1001,
-    persona: '바쁜 워커홀릭 20대 여성 (출근 전 5분 스킨케어)',
-    date: '2025-12-27',
-    time: '09:00',
-    product: '라네즈 워터뱅크 블루 히알루로닉 크림',
-    message: '출근 준비로 바쁘죠? 5분 보습 루틴으로 촉촉하게 시작해요. 오늘만 한정 혜택 확인하기',
-    status: 'info',
-  },
-  {
-    id: 1002,
-    persona: '피부 컨디션 민감한 30대 남성 (미니멀 루틴)',
-    date: '2025-12-27',
-    time: '10:30',
-    product: '아이오페 맨 올인원 리차징 로션',
-    message: '번들거림은 줄이고 수분은 채우는 올인원. 간편하게 바꿔보세요. 상품 상세 보기',
-    status: 'info',
-  },
-  {
-    id: 1003,
-    persona: '트렌드에 민감한 20대 (신상/한정판 선호)',
-    date: '2025-12-27',
-    time: '11:00',
-    product: '헤라 센슈얼 누드 글로스 (홀리데이 컬러)',
-    message: '지금 가장 핫한 홀리데이 컬러, 놓치면 품절! 오늘 발송 혜택으로 먼저 만나보세요',
-    status: 'warning',
-  },
-  {
-    id: 1004,
-    persona: '가성비 중시 20대 직장인 (쿠폰/적립금 민감)',
-    date: '2025-12-27',
-    time: '12:00',
-    product: '이니스프리 그린티 씨드 세럼',
-    message: '점심시간 10분 쇼핑 찬스! 쿠폰 적용 가능한 대표 보습 세럼, 지금 확인해요',
-    status: 'info',
-  },
-  {
-    id: 1005,
-    persona: '건조한 겨울철 케어가 급한 30대 여성 (보습 집착)',
-    date: '2025-12-27',
-    time: '13:30',
-    product: '에스트라 아토베리어365 크림',
-    message: '당김·건조가 심해졌다면 장벽부터 케어해요. 베스트 보습 크림 상세 확인',
-    status: 'info',
-  },
-  {
-    id: 1006,
-    persona: '프리미엄 선호 40대 (안티에이징/브랜드 충성)',
-    date: '2025-12-27',
-    time: '14:00',
-    product: '설화수 자음생크림',
-    message: '연말엔 탄탄한 피부 컨디션이 답. 자음생 라인으로 집중 케어 시작해보세요',
-    status: 'info',
-  },
-  {
-    id: 1007,
-    persona: '선물 고민 많은 30대 (기프트/세트 선호)',
-    date: '2025-12-27',
-    time: '15:00',
-    product: '헤라 베스트 기프트 세트',
-    message: '선물 고민 끝! 베스트 셀러로 구성된 기프트 세트, 재고 소진 전 확인하세요',
-    status: 'default',
-  },
-  {
-    id: 1008,
-    persona: '야외 활동 많은 20대 (톤업/선케어 관심)',
-    date: '2025-12-27',
-    time: '16:30',
-    product: '라네즈 워터뱅크 톤업 선크림',
-    message: '톤업+자외선 차단을 한 번에. 오늘 나가기 전, 가볍게 챙겨보세요',
-    status: 'info',
-  },
-  {
-    id: 1009,
-    persona: '모공/피지 고민 20대 (클린 뷰티 관심)',
-    date: '2025-12-27',
-    time: '18:00',
-    product: '이니스프리 화산송이 모공 클레이 마스크',
-    message: '하루 마무리는 깔끔하게. 모공·피지 케어로 주말 약속 전 피부를 정리해요',
-    status: 'info',
-  },
-  {
-    id: 1010,
-    persona: '퇴근 후 홈케어 루틴러 30대 (팩/앰플 루틴)',
-    date: '2025-12-27',
-    time: '20:30',
-    product: '아이오페 슈퍼바이탈 앰플',
-    message: '오늘 하루 고생했어요. 퇴근 후 1단계 앰플로 탄탄한 컨디션을 채워보세요',
-    status: 'success',
-  },
-];
+export const DataTable = ({
+  rows,
+  onRowClick,
+  onPersonaClick,
+  onProductClick,
+  onChangeScheduleClick,
+  pageSize = 10,
+  variant = 'today',
+}: DataTableProps) => {
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
+  const [timeFilter, setTimeFilter] = useState<string>(''); // HH:mm
+  const [statusFilter, setStatusFilter] = useState<'all' | ChipStatus>('all');
+  const [personaQuery, setPersonaQuery] = useState('');
+  const [productQuery, setProductQuery] = useState('');
+  const [contentQuery, setContentQuery] = useState('');
+  const [page, setPage] = useState(1);
 
-export const DataTable = () => {
+  const [popover, setPopover] = useState<{
+    key: FilterPopoverKey | null;
+    anchorEl: HTMLElement | null;
+  }>({ key: null, anchorEl: null });
+
+  const openPopover = (key: FilterPopoverKey) => (e: MouseEvent<HTMLElement>) => {
+    setPopover({ key, anchorEl: e.currentTarget });
+  };
+
+  const closePopover = () => setPopover({ key: null, anchorEl: null });
+
+  const filteredRows = useMemo(() => {
+    const dateStr = variant === 'trend' && selectedDate ? selectedDate.format('YYYY-MM-DD') : null;
+    const timeStr = variant === 'today' ? timeFilter.trim() : '';
+    const personaQ = personaQuery.trim().toLowerCase();
+    const productQ = productQuery.trim().toLowerCase();
+    const contentQ = contentQuery.trim().toLowerCase();
+
+    const isTrendFailure = (row: TableRowData) => {
+      const failCount = (row.errorCount ?? 0) + (row.optoutCount ?? 0);
+      return failCount > 0 || (row.failedRecipients?.length ?? 0) > 0 || row.status === 'error';
+    };
+
+    return rows.filter((row) => {
+      if (dateStr && row.date !== dateStr) return false;
+      if (timeStr && row.time !== timeStr) return false;
+      if (statusFilter !== 'all') {
+        if (variant === 'trend') {
+          const failure = isTrendFailure(row);
+          if (statusFilter === 'success' && failure) return false;
+          if (statusFilter === 'error' && !failure) return false; // error 값을 "실패"로 사용
+        } else {
+          if (row.status !== statusFilter) return false;
+        }
+      }
+      if (personaQ && !row.persona.toLowerCase().includes(personaQ)) return false;
+      if (productQ && !row.product.toLowerCase().includes(productQ)) return false;
+      if (contentQ) {
+        const haystack = `${row.title} ${row.description}`.toLowerCase();
+        if (!haystack.includes(contentQ)) return false;
+      }
+      return true;
+    });
+  }, [contentQuery, personaQuery, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+
+  const safePage = Math.min(page, pageCount);
+
+  const pagedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, pageSize, safePage]);
+
+  const handleStatusChange = (e: SelectChangeEvent) => {
+    setStatusFilter(e.target.value as 'all' | ChipStatus);
+    setPage(1);
+  };
+
+  const resetFilters = () => {
+    setSelectedDate(null);
+    setTimeFilter('');
+    setStatusFilter('all');
+    setPersonaQuery('');
+    setProductQuery('');
+    setContentQuery('');
+    setPage(1);
+  };
+
+  const popoverOpen = Boolean(popover.key && popover.anchorEl);
+  const popoverId = popoverOpen && popover.key ? `datatable-filter-${popover.key}` : undefined;
+
+  // 컬럼 수: 페르소나, 발송시간/일시, 채널, 상품명, 메시지, 상태/결과요약
+  const emptyColSpan = 6;
+
+  const headerIconButtonSx = {
+    p: 0.25,
+    fontSize: '1rem',
+  } as const;
+
+  const formatChannel = (channel?: string) => {
+    if (!channel) return '-';
+    if (channel === '카카오톡 알림톡') return '알림톡';
+    return channel;
+  };
+
+  const truncateText = (text: string, maxLen: number) => {
+    const t = (text ?? '').trim();
+    if (!t) return '';
+    if (t.length <= maxLen) return t;
+    return `${t.slice(0, maxLen)}...`;
+  };
+
+  const canShowChangeScheduleIcon = (row: TableRowData) => {
+    if (!onChangeScheduleClick) return false;
+    if (variant === 'today') return true;
+
+    // 발송 추이: "발송 예정"일 때만 노출, "발송 완료"는 미노출
+    if (row.status === 'success') return false;
+    const scheduledAt = dayjs(`${row.date} ${row.time}`, 'YYYY-MM-DD HH:mm');
+    if (!scheduledAt.isValid()) return false;
+    return scheduledAt.isAfter(dayjs());
+  };
+
   return (
-    <StyledTableContainer>
-      <Table sx={{ minWidth: '40rem' }} aria-label="customer table">
+    <Box>
+      <Popover
+        id={popoverId}
+        open={popoverOpen}
+        anchorEl={popover.anchorEl}
+        onClose={closePopover}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { borderRadius: amoreTokens.radius.base } } }}
+      >
+        <Box sx={{ p: 2, width: { xs: '18rem', sm: '22rem' } }}>
+          {popover.key === 'date' && variant === 'trend' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                날짜 필터
+              </Typography>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DatePicker
+                  label="발송일(날짜)"
+                  value={selectedDate}
+                  onChange={(v) => {
+                    setSelectedDate(v);
+                    setPage(1);
+                  }}
+                  format="YYYY-MM-DD"
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      fullWidth: true,
+                    },
+                  }}
+                />
+              </LocalizationProvider>
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setSelectedDate(null);
+                    setPage(1);
+                  }}
+                  disabled={!selectedDate}
+                >
+                  초기화
+                </Button>
+                <Button variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
+          {popover.key === 'time' && variant === 'today' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                시간 필터
+              </Typography>
+              <TextField
+                size="small"
+                label="발송 시간(HH:mm)"
+                type="time"
+                value={timeFilter}
+                onChange={(e) => {
+                  setTimeFilter(e.target.value);
+                  setPage(1);
+                }}
+                fullWidth
+                inputProps={{ step: 300 }}
+              />
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setTimeFilter('');
+                    setPage(1);
+                  }}
+                  disabled={!timeFilter}
+                >
+                  초기화
+                </Button>
+                <Button variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
+          {popover.key === 'status' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                {variant === 'trend' ? '성공/실패 필터' : '상태 필터'}
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="status-filter-label">상태</InputLabel>
+                <Select
+                  labelId="status-filter-label"
+                  value={statusFilter}
+                  label="상태"
+                  onChange={handleStatusChange}
+                >
+                  <MenuItem value="all">전체</MenuItem>
+                  {variant === 'trend' ? (
+                    <>
+                      <MenuItem value="success">성공</MenuItem>
+                      <MenuItem value="error">실패</MenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <MenuItem value="success">발송 완료</MenuItem>
+                      <MenuItem value="error">발송 취소</MenuItem>
+                      <MenuItem value="info">발송 대기</MenuItem>
+                    </>
+                  )}
+                </Select>
+              </FormControl>
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setPage(1);
+                  }}
+                  disabled={statusFilter === 'all'}
+                >
+                  초기화
+                </Button>
+                <Button variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
+          {popover.key === 'persona' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                페르소나 검색
+              </Typography>
+              <TextField
+                size="small"
+                label="페르소나"
+                placeholder="예: 20대 여성"
+                value={personaQuery}
+                onChange={(e) => {
+                  setPersonaQuery(e.target.value);
+                  setPage(1);
+                }}
+                fullWidth
+              />
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setPersonaQuery('');
+                    setPage(1);
+                  }}
+                  disabled={!personaQuery}
+                >
+                  초기화
+                </Button>
+                <Button variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
+          {popover.key === 'product' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                상품명 검색
+              </Typography>
+              <TextField
+                size="small"
+                label="상품명"
+                placeholder="예: 쿠션"
+                value={productQuery}
+                onChange={(e) => {
+                  setProductQuery(e.target.value);
+                  setPage(1);
+                }}
+                fullWidth
+              />
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setProductQuery('');
+                    setPage(1);
+                  }}
+                  disabled={!productQuery}
+                >
+                  초기화
+                </Button>
+                <Button variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
+          {popover.key === 'content' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                메시지 검색
+              </Typography>
+              <TextField
+                size="small"
+                label="타이틀/본문"
+                placeholder="예: 할인"
+                value={contentQuery}
+                onChange={(e) => {
+                  setContentQuery(e.target.value);
+                  setPage(1);
+                }}
+                fullWidth
+              />
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setContentQuery('');
+                    setPage(1);
+                  }}
+                  disabled={!contentQuery}
+                >
+                  초기화
+                </Button>
+                <Button variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+        </Box>
+      </Popover>
+
+      <StyledTableContainer>
+        <Table sx={{ minWidth: '50rem' }} aria-label={variant === 'trend' ? 'send history table' : 'today schedule table'}>
         <TableHead>
           <TableRow>
-            <StyledTh>ID</StyledTh>
-            <StyledTh>페르소나</StyledTh>
-            <StyledTh>발송 일시</StyledTh>
-            <StyledTh>상품명</StyledTh>
-            <StyledTh>메시지 문구</StyledTh>
-            <StyledTh>상태</StyledTh>
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">페르소나</Box>
+                <Tooltip title="페르소나 검색">
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('persona')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: personaQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                    }}
+                  >
+                    <SearchIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </StyledTh>
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">상품명</Box>
+                <Tooltip title="상품명 검색">
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('product')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: productQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                    }}
+                  >
+                    <SearchIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </StyledTh>
+            <StyledTh>
+              <Box component="span">채널</Box>
+            </StyledTh>
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">메시지</Box>
+                <Tooltip title="타이틀/본문 검색">
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('content')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: contentQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                    }}
+                  >
+                    <SearchIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </StyledTh>
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">{variant === 'today' ? '발송 시간' : '발송 일시'}</Box>
+                {variant === 'trend' ? (
+                  <Tooltip title="날짜 필터">
+                    <IconButton
+                      size="small"
+                      onClick={openPopover('date')}
+                      sx={{
+                        ...headerIconButtonSx,
+                        color: selectedDate ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                      }}
+                    >
+                      <EventIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="시간 필터">
+                    <IconButton
+                      size="small"
+                      onClick={openPopover('time')}
+                      sx={{
+                        ...headerIconButtonSx,
+                        color: timeFilter ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                      }}
+                    >
+                      <EventIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Stack>
+            </StyledTh>
+            <StyledTh align="center">
+              <Stack direction="row" spacing={0.25} alignItems="center" justifyContent="center">
+                <Box component="span">{variant === 'trend' ? '결과 요약' : '상태'}</Box>
+                <Tooltip title={variant === 'trend' ? '결과 필터' : '상태 필터'}>
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('status')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: statusFilter !== 'all' ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                    }}
+                  >
+                    <FilterAltIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="필터 초기화">
+                  <IconButton
+                    size="small"
+                    onClick={resetFilters}
+                    sx={{ ...headerIconButtonSx, color: amoreTokens.colors.gray[600] }}
+                  >
+                    <RestartAltIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </StyledTh>
           </TableRow>
         </TableHead>
         <TableBody>
-          {rows.map((row) => (
-            <StyledRow key={row.id}>
-              <StyledTd>{row.id}</StyledTd>
-              <StyledTd>{row.persona}</StyledTd>
-              <StyledTd>{`${row.date} ${row.time}`}</StyledTd>
-              <StyledTd>{row.product}</StyledTd>
-              <StyledTd>{row.message}</StyledTd>
-              <StyledTd>
-                <StatusChip 
-                  status={row.status} 
-                  label={statusLabelMap[row.status]} 
-                />
+          {pagedRows.length > 0 ? (
+            pagedRows.map((row) => (
+              <StyledRow
+                key={row.id}
+                hover
+                $clickable={Boolean(onRowClick)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+              >
+                <StyledTd sx={{ minWidth: '12rem', fontWeight: 600 }}>
+                  {onPersonaClick ? (
+                    <AppButton
+                      variant="link"
+                      linkKind="internal"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPersonaClick(row);
+                      }}
+                      aria-label="페르소나 상세 보기"
+                    >
+                      {row.persona}
+                    </AppButton>
+                  ) : (
+                    row.persona
+                  )}
+                </StyledTd>
+                <StyledTd sx={{ minWidth: '10rem' }}>
+                  {onProductClick ? (
+                    <AppButton
+                      variant="link"
+                      linkKind="external"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onProductClick(row);
+                      }}
+                      aria-label="상품 상세 보기"
+                    >
+                      {row.product}
+                    </AppButton>
+                  ) : (
+                    row.product
+                  )}
+                </StyledTd>
+                <StyledTd sx={{ whiteSpace: 'nowrap' }}>{formatChannel(row.channel)}</StyledTd>
+                <StyledTd sx={{ maxWidth: '26rem' }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {row.title}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: amoreTokens.colors.gray[600],
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {truncateText(row.description, 60)}
+                    </Typography>
+                  </Box>
+                </StyledTd>
+                <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Box component="span">{variant === 'today' ? row.time : `${row.date} ${row.time}`}</Box>
+                    {canShowChangeScheduleIcon(row) && (
+                      <Tooltip title="시간 변경">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onChangeScheduleClick?.(row);
+                          }}
+                          sx={{ ...headerIconButtonSx, color: amoreTokens.colors.gray[600] }}
+                        >
+                          <EditOutlinedIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Stack>
+                </StyledTd>
+                <StyledTd align="center">
+                  {variant === 'trend' ? (
+                    <Stack direction="column" spacing={0.75} alignItems="center">
+                      <StatusChip status="success" label={`성공 ${(row.successCount ?? 0).toLocaleString()}건`} />
+                      <StatusChip status="error" label={`실패 ${((row.errorCount ?? 0) + (row.optoutCount ?? 0)).toLocaleString()}건`} />
+                    </Stack>
+                  ) : (
+                    <StatusChip 
+                      label={statusLabelMap[row.status]} 
+                      status={row.status} 
+                    />
+                  )}
+                </StyledTd>
+              </StyledRow>
+            ))
+          ) : (
+            <TableRow>
+              <StyledTd colSpan={emptyColSpan} align="center" sx={{ py: 10 }}>
+                데이터가 존재하지 않습니다.
               </StyledTd>
-            </StyledRow>
-          ))}
+            </TableRow>
+          )}
         </TableBody>
-      </Table>
-    </StyledTableContainer>
+        </Table>
+      </StyledTableContainer>
+
+      <Pagination
+        count={pageCount}
+        page={safePage}
+        onChange={(_event: ChangeEvent<unknown>, value: number) => setPage(value)}
+      />
+    </Box>
   );
 };
