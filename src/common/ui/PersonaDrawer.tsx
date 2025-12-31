@@ -1,11 +1,15 @@
 // src/common/ui/PersonaDrawer.tsx
-import { Drawer, Box, Typography, IconButton, Divider, Stack, Button, Chip } from '@mui/material';
+import { useState } from 'react';
+import { Drawer, Box, Typography, IconButton, Divider, Stack, Chip } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import styled from 'styled-components';
 import { amoreTokens } from '../../styles/theme';
 import type { PersonaProfile } from '../../api/types';
 import { StatusChip } from './Chip';
 import { getStatusLabel } from './statusLabels';
+import { Button as AppButton } from './Button';
+import { DetailDrawer } from './DetailDrawer';
+import type { TableRowData } from './DataTable';
 
 const DrawerWrapper = styled(Box)`
   width: 30rem;
@@ -22,11 +26,18 @@ const DrawerHeader = styled(Box)`
   margin-bottom: ${amoreTokens.spacing(3)};
 `;
 
-const Label = styled(Typography)`
+const InfoRow = styled(Box)`
+  display: flex;
+  align-items: center;
+  gap: ${amoreTokens.spacing(2)};
+`;
+
+const InfoLabel = styled(Typography)`
   color: ${amoreTokens.colors.gray[500]};
   font-size: ${amoreTokens.typography.size.caption};
-  font-weight: 800;
-  margin-bottom: ${amoreTokens.spacing(0.5)};
+  font-weight: 700;
+  min-width: 6.5rem;
+  flex: 0 0 auto;
 `;
 
 interface PersonaDrawerProps {
@@ -36,28 +47,46 @@ interface PersonaDrawerProps {
   onOpenHistory?: (personaId: string) => void;
 }
 
-export const PersonaDrawer = ({ open, onClose, data, onOpenHistory }: PersonaDrawerProps) => {
-  if (!data) return null;
+export const PersonaDrawer = ({ open, onClose, data }: PersonaDrawerProps) => {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedSend, setSelectedSend] = useState<TableRowData | null>(null);
 
-  const openTrendTabInNewWindow = () => {
-    const base = `${window.location.origin}${window.location.pathname}`;
-    window.open(`${base}#/trend`, '_blank', 'noopener,noreferrer');
-  };
+  if (!data) return null;
 
   const renderValue = (v?: string) => (v && v.trim() ? v : '-');
 
+  const openSendDetail = (send: NonNullable<PersonaProfile['recentSends']>[number]) => {
+    setSelectedSend({
+      id: send.id,
+      persona: data.persona,
+      personaId: data.personaId,
+      date: send.date,
+      time: send.time,
+      product: send.product,
+      title: send.title,
+      status: send.status,
+      // PersonaDrawer의 recentSends에는 description이 없으므로 placeholder로 제공
+      description: '',
+    });
+    setDetailOpen(true);
+  };
+
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      PaperProps={{
-        sx: { borderRadius: amoreTokens.radius.drawerRight, boxShadow: '-4px 0 10px rgba(0,0,0,0.05)' },
-      }}
-    >
-      <DrawerWrapper>
+    <>
+      <Drawer
+        anchor="right"
+        open={open}
+        onClose={() => {
+          setDetailOpen(false);
+          onClose();
+        }}
+        PaperProps={{
+          sx: { borderRadius: amoreTokens.radius.drawerRight, boxShadow: '-4px 0 10px rgba(0,0,0,0.05)' },
+        }}
+      >
+        <DrawerWrapper>
         <DrawerHeader>
-          <Typography variant="h3">페르소나 유형 상세</Typography>
+          <Typography variant="h3">{data.persona}</Typography>
           <IconButton onClick={onClose} size="small">
             <CloseIcon />
           </IconButton>
@@ -66,89 +95,89 @@ export const PersonaDrawer = ({ open, onClose, data, onOpenHistory }: PersonaDra
         <Divider sx={{ mb: 3 }} />
 
         <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-          <Stack spacing={3}>
-            <Box>
-              <Label>페르소나</Label>
-              <Typography variant="body1" sx={{ fontWeight: 800 }}>
-                {data.persona}
-              </Typography>
-            </Box>
+          <Stack spacing={2}>
 
-            <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
-              <Box sx={{ minWidth: '10rem' }}>
-                <Label>유저 연령대</Label>
-                <Typography variant="body2">{renderValue(data.ageGroup)}</Typography>
-              </Box>
-              <Box sx={{ minWidth: '10rem' }}>
-                <Label>주력 카테고리</Label>
-                <Typography variant="body2">{renderValue(data.mainCategory)}</Typography>
-              </Box>
-              <Box sx={{ minWidth: '10rem' }}>
-                <Label>구매 방식</Label>
-                <Typography variant="body2">{renderValue(data.purchaseMethod)}</Typography>
-              </Box>
-              <Box sx={{ minWidth: '10rem' }}>
-                <Label>브랜드 충성도</Label>
-                <Typography variant="body2">{renderValue(data.brandLoyalty)}</Typography>
-              </Box>
-              <Box sx={{ minWidth: '10rem' }}>
-                <Label>가격 민감도</Label>
-                <Typography variant="body2">{renderValue(data.priceSensitivity)}</Typography>
-              </Box>
-              <Box sx={{ minWidth: '10rem' }}>
-                <Label>혜택 민감도</Label>
-                <Typography variant="body2">{renderValue(data.benefitSensitivity)}</Typography>
-              </Box>
-            </Stack>
+            <InfoRow>
+              <InfoLabel>유저 연령대</InfoLabel>
+              <Typography variant="body2">{renderValue(data.ageGroup)}</Typography>
+            </InfoRow>
 
-            <Box>
-              <Label>트렌드 키워드</Label>
+            <InfoRow>
+              <InfoLabel>주력 카테고리</InfoLabel>
+              <Typography variant="body2">{renderValue(data.mainCategory)}</Typography>
+            </InfoRow>
+
+            <InfoRow>
+              <InfoLabel>구매 방식</InfoLabel>
+              <Typography variant="body2">{renderValue(data.purchaseMethod)}</Typography>
+            </InfoRow>
+
+            <InfoRow>
+              <InfoLabel>브랜드 충성도</InfoLabel>
+              <Typography variant="body2">{renderValue(data.brandLoyalty)}</Typography>
+            </InfoRow>
+
+            <InfoRow>
+              <InfoLabel>가격 민감도</InfoLabel>
+              <Typography variant="body2">{renderValue(data.priceSensitivity)}</Typography>
+            </InfoRow>
+
+            <InfoRow>
+              <InfoLabel>혜택 민감도</InfoLabel>
+              <Typography variant="body2">{renderValue(data.benefitSensitivity)}</Typography>
+            </InfoRow>
+
+            <InfoRow sx={{ alignItems: 'flex-start' }}>
+              <InfoLabel sx={{ mt: '2px' }}>트렌드 키워드</InfoLabel>
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 {(data.trendKeywords?.length ? data.trendKeywords : ['-']).map((k, idx) => (
-                  <Chip key={`${k}-${idx}`} label={k} size="small" sx={{ borderRadius: amoreTokens.radius.base }} />
+                  <Chip key={`${k}-${idx}`} label={k} variant="outlined" size="small" sx={{ borderRadius: amoreTokens.radius.base }} />
                 ))}
               </Stack>
-            </Box>
+            </InfoRow>
 
-            <Box>
-              <Label>핵심 키워드</Label>
+            <InfoRow sx={{ alignItems: 'flex-start' }}>
+              <InfoLabel sx={{ mt: '2px' }}>핵심 키워드</InfoLabel>
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 {(data.coreKeywords?.length ? data.coreKeywords : ['-']).map((k, idx) => (
-                  <Chip key={`${k}-${idx}`} label={k} size="small" sx={{ borderRadius: amoreTokens.radius.base }} />
+                  <Chip key={`${k}-${idx}`} label={k} variant="outlined" size="small" sx={{ borderRadius: amoreTokens.radius.base }} />
                 ))}
               </Stack>
-            </Box>
+            </InfoRow>
 
-            <Box sx={{ border: `1px solid ${amoreTokens.colors.gray[200]}`, p: 2, borderRadius: amoreTokens.radius.base }}>
-              <Label>발송 히스토리</Label>
-              <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[600] }}>
-                최근 발송 5개 노출
+              <Box sx={{ border: `1px solid ${amoreTokens.colors.gray[200]}`, p: 2, borderRadius: amoreTokens.radius.base }}>
+              <Typography
+                variant="caption"
+                sx={{ color: amoreTokens.colors.gray[500], fontWeight: 700, display: 'block', mb: 0.5 }}
+              >
+                발송 히스토리
               </Typography>
 
               <Stack spacing={1.25} sx={{ mt: 1.5 }}>
                 {(data.recentSends?.length ? data.recentSends : []).slice(0, 5).map((s) => (
                   <Box key={s.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
                     <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {s.title}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[600] }}>
-                        {s.date} {s.time} · {s.product}
-                      </Typography>
+                      <Stack spacing={0.25} alignItems="flex-start" sx={{ minWidth: 0, textAlign: 'left' }}>
+                        <AppButton
+                          variant="link"
+                          linkKind="internal"
+                          onClick={() => openSendDetail(s)}
+                          aria-label="발송 히스토리 상세 보기"
+                        >
+                          {s.title}
+                        </AppButton>
+                        <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[600] }}>
+                          {s.date} {s.time} · {s.product}
+                        </Typography>
+                      </Stack>
                     </Box>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <StatusChip status={s.status} label={getStatusLabel(s.status)} />
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={openTrendTabInNewWindow}
-                        sx={{ borderRadius: amoreTokens.radius.base, whiteSpace: 'nowrap' }}
-                      >
-                        자세히보기
-                      </Button>
                     </Stack>
                   </Box>
                 ))}
+
+                
 
                 {!data.recentSends?.length && (
                   <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
@@ -160,24 +189,16 @@ export const PersonaDrawer = ({ open, onClose, data, onOpenHistory }: PersonaDra
           </Stack>
         </Box>
 
-        <Box sx={{ mt: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => {
-              if (onOpenHistory) onOpenHistory(data.personaId);
-              else openTrendTabInNewWindow();
-            }}
-            sx={{ borderColor: amoreTokens.colors.gray[300], color: amoreTokens.colors.gray[700] }}
-          >
-            발송 히스토리 자세히보기(새창)
-          </Button>
-          <Button fullWidth variant="outlined" onClick={onClose} sx={{ borderColor: amoreTokens.colors.gray[300], color: amoreTokens.colors.gray[700] }}>
-            닫기
-          </Button>
-        </Box>
+        {/* 하단 버튼 제거: 상세 Drawer 내 히스토리 섹션에서만 접근 */}
       </DrawerWrapper>
-    </Drawer>
+      </Drawer>
+
+      <DetailDrawer
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        data={selectedSend}
+      />
+    </>
   );
 };
 

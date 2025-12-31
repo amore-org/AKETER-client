@@ -121,5 +121,16 @@ export const amoreTheme = createTheme({
         },
       },
     },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: amoreTokens.radius.base,
+        },
+        outlined: {
+          // Chip variant="outlined" 기본 보더 컬러를 전역으로 통일
+          borderColor: amoreTokens.colors.gray[300],
+        },
+      },
+    },
   },
 });
