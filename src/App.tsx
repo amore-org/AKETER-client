@@ -15,6 +15,7 @@ import type { PersonaProfile } from './api/types';
 import { PersonaDrawer } from './common/ui/PersonaDrawer';
 import { PersonaCloud, type PersonaCloudItem } from './common/ui/PersonaCloud';
 import { ScheduleChangeDialog } from './common/ui/ScheduleChangeDialog';
+import { getReservationDetail, getTodayReservations, mapReservationDtoToTableRow } from './api/reservations';
 
 const NAVBAR_HEIGHT = amoreTokens.spacing(8);
 const TABS_HEIGHT = amoreTokens.spacing(6);
@@ -108,77 +109,6 @@ const personaBaseRaw: Array<Record<string, unknown>> = [
     coreKeywords: ['컨디션', '탄력', '마무리'],
     priceSensitivity: '중',
     benefitSensitivity: '중',
-  },
-];
-
-const buildTodayRowsRaw = (todayStr: string): Array<Record<string, unknown>> => [
-  {
-    id: 1001,
-    personaId: 'p-001',
-    persona: '바쁜 워커홀릭 20대 여성',
-    date: todayStr,
-    time: '09:00',
-    channel: '푸시',
-    recipientCount: 1280,
-    lastUpdatedBy: '마케터A',
-    lastUpdatedAt: `${todayStr} 08:45`,
-    product: '라네즈 워터뱅크 블루 히알루로닉 크림',
-    productUrl: amoreMallUrl(1001),
-    title: '출근 전 5분 보습 루틴',
-    description: '출근 준비로 바쁘죠? 5분 보습 루틴으로 촉촉하게 시작해요. 오늘만 한정 혜택 확인하기',
-    recommendedReason: '출근 전 짧은 시간에도 적용 가능한 5분 보습 루틴이 주요 니즈로 감지됨',
-    status: 'info',
-  },
-  {
-    id: 1002,
-    personaId: 'p-002',
-    persona: '피부 컨디션 민감한 30대 남성',
-    date: todayStr,
-    time: '10:30',
-    channel: '카카오톡 알림톡',
-    recipientCount: 940,
-    lastUpdatedBy: '마케터B',
-    lastUpdatedAt: `${todayStr} 09:10`,
-    product: '아이오페 맨 올인원 리차징 로션',
-    productUrl: amoreMallUrl(1002),
-    title: '간편한 올인원으로 루틴 끝',
-    description: '번들거림은 줄이고 수분은 채우는 올인원. 간편하게 바꿔보세요. 상품 상세 보기',
-    recommendedReason: '남성 고객군에서 “미니멀 루틴” 선호도가 높고 재구매 전환율이 높음',
-    status: 'info',
-  },
-  {
-    id: 1009,
-    personaId: 'p-005',
-    persona: '모공/피지 고민 20대',
-    date: todayStr,
-    time: '18:00',
-    channel: '카카오톡 알림톡',
-    recipientCount: 980,
-    lastUpdatedBy: '시스템',
-    lastUpdatedAt: `${todayStr} 00:00`,
-    product: '이니스프리 화산송이 모공 클레이 마스크',
-    productUrl: amoreMallUrl(1009),
-    title: '하루 마무리는 모공·피지 케어',
-    description: '모공·피지 케어로 주말 약속 전 피부를 정리해요',
-    recommendedReason: '클린 뷰티 관심군에서 주말/약속 전 “모공 정리” 키워드 반응이 높음',
-    status: 'info',
-  },
-  {
-    id: 1010,
-    personaId: 'p-006',
-    persona: '퇴근 후 홈케어 루틴러 30대',
-    date: todayStr,
-    time: '20:30',
-    channel: '푸시',
-    recipientCount: 1800,
-    lastUpdatedBy: '마케터A',
-    lastUpdatedAt: `${todayStr} 09:30`,
-    product: '아이오페 슈퍼바이탈 앰플',
-    productUrl: amoreMallUrl(1010),
-    title: '퇴근 후 1단계 앰플 루틴',
-    description: '오늘 하루 고생했어요. 퇴근 후 1단계 앰플로 탄탄한 컨디션을 채워보세요',
-    recommendedReason: '퇴근 후 홈케어 루틴 고객에게 “1단계” 메시지 구조가 높은 클릭률을 보임',
-    status: 'success',
   },
 ];
 
@@ -336,6 +266,7 @@ function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<TableRowData | null>(null);
   const [detailInitialDialog, setDetailInitialDialog] = useState<'schedule' | 'cancel' | 'reprocess' | null>(null);
+  const [todayRows, setTodayRows] = useState<TableRowData[]>([]);
 
   const [personaDrawerOpen, setPersonaDrawerOpen] = useState(false);
   const [selectedPersona, setSelectedPersona] = useState<PersonaProfile | null>(null);
@@ -347,10 +278,7 @@ function App() {
 
   const todayStr = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
 
-  const normalizedTodayRows = useMemo(
-    () => normalizeSendRows(buildTodayRowsRaw(todayStr), defaultFieldMapping).filter((r) => r.date === todayStr),
-    [todayStr],
-  );
+  const normalizedTodayRows = useMemo(() => todayRows, [todayRows]);
   const normalizedTrendRows = useMemo(
     () => normalizeSendRows(buildTrendRowsRaw(todayStr), defaultFieldMapping),
     [todayStr],
@@ -444,6 +372,47 @@ function App() {
     const nextHash = `#/${tabKey}`;
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
   }, [tabKey]);
+
+  // 오늘 발송 예약: API 연동
+  useEffect(() => {
+    const ac = new AbortController();
+
+    (async () => {
+      try {
+        // docs/API_명세서.md: date 미전달 시 서버 기준 오늘(Asia/Seoul)이지만,
+        // 프론트도 명시적으로 오늘 날짜를 내려서 동작을 고정한다.
+        const page = await getTodayReservations({ date: todayStr, page: 0, size: 200, sort: 'scheduledAt,asc' });
+        const rows = page.items.map(mapReservationDtoToTableRow).filter((r) => r.date === todayStr);
+        setTodayRows(rows);
+      } catch (e) {
+        // TODO: 토스트/에러 UI 연결
+        console.error('[오늘 발송 예약 조회 실패]', e);
+        setTodayRows([]);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [todayStr]);
+
+  // Drawer 열릴 때: 예약 상세 API로 recommendReason 등 보강
+  useEffect(() => {
+    if (!drawerOpen || !selectedRow) return;
+    const reservationId = selectedRow.id;
+
+    (async () => {
+      try {
+        const detail = await getReservationDetail(reservationId);
+        const mapped = mapReservationDtoToTableRow(detail);
+        setSelectedRow((prev) => {
+          if (!prev || prev.id !== reservationId) return prev;
+          // list에서 이미 표시 중인 값은 유지하고, 상세에서만 내려오는 필드는 덮어씀
+          return { ...prev, ...mapped, recommendedReason: mapped.recommendedReason };
+        });
+      } catch (e) {
+        console.error('[예약 상세 조회 실패]', e);
+      }
+    })();
+  }, [drawerOpen, selectedRow]);
   return (
     <Box sx={{ height: '100vh', overflow: 'hidden' }}>
       <TopNavbar />
