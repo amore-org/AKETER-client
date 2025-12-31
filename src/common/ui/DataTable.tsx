@@ -58,7 +58,7 @@ interface DataTableProps {
 
 type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'channel';
 
-const StyledTableContainer = styled(TableContainer)`
+export const StyledTableContainer = styled(TableContainer)`
   && {
     border: 1px solid ${amoreTokens.colors.navy[100]};
     border-radius: ${amoreTokens.radius.base};
@@ -68,7 +68,7 @@ const StyledTableContainer = styled(TableContainer)`
 `;
 
 // 2. 헤더 셀 스타일: Navy-50 배경에 Gray-900 텍스트
-const StyledTh = styled(TableCell)`
+export const StyledTh = styled(TableCell)`
   && {
     background-color: ${amoreTokens.colors.navy[50]};
     color: ${amoreTokens.colors.gray[900]};
@@ -81,7 +81,7 @@ const StyledTh = styled(TableCell)`
 `;
 
 // 3. 본문 셀 스타일: Gray-700 텍스트와 세밀한 여백
-const StyledTd = styled(TableCell)`
+export const StyledTd = styled(TableCell)`
   && {
     color: ${amoreTokens.colors.gray[700]};
     font-size: ${amoreTokens.typography.size.body2};
@@ -90,7 +90,7 @@ const StyledTd = styled(TableCell)`
   }
 `;
 
-const StyledRow = styled(TableRow)<{ $clickable?: boolean }>`
+export const StyledRow = styled(TableRow)<{ $clickable?: boolean }>`
   transition: background-color 0.2s ease;
   cursor: ${({ $clickable }) => ($clickable ? 'pointer' : 'default')};
   &:hover {
@@ -251,7 +251,7 @@ export const DataTable = ({
                 <DatePicker
                   label="발송일(날짜)"
                   value={selectedDate}
-                  onChange={(v) => {
+                  onChange={(v: Dayjs | null) => {
                     setSelectedDate(v);
                     setPage(1);
                   }}
