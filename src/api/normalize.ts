@@ -12,8 +12,8 @@ const asNumber = (v: unknown): number | undefined => (typeof v === 'number' && N
 const asArray = (v: unknown): unknown[] | undefined => (Array.isArray(v) ? v : undefined);
 
 const asChipStatus = (v: unknown): ChipStatus => {
-  if (v === 'success' || v === 'warning' || v === 'error' || v === 'info' || v === 'paused' || v === 'default') return v;
-  return 'default';
+  if (v === 'success' || v === 'error' || v === 'info') return v;
+  return 'info';
 };
 
 function pick<TModel>(

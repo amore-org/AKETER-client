@@ -15,7 +15,7 @@ import type { PersonaProfile } from './api/types';
 import { PersonaDrawer } from './common/ui/PersonaDrawer';
 import { PersonaCloud, type PersonaCloudItem } from './common/ui/PersonaCloud';
 import { PersonaRankTable } from './common/ui/PersonaRankTable';
-import { ScheduleChangeDialog } from './common/ui/ScheduleChangeDialog';
+import { ScheduleChangeModal } from './common/ui/ConfirmModal';
 import { buildTrendRowsRaw, personaBaseRaw } from './features/reservations/mockData';
 
 const NAVBAR_HEIGHT = amoreTokens.spacing(8);
@@ -84,6 +84,7 @@ function App() {
 
   const [tableScheduleOpen, setTableScheduleOpen] = useState(false);
   const [tableScheduleRow, setTableScheduleRow] = useState<TableRowData | null>(null);
+  const [tableScheduleTime, setTableScheduleTime] = useState<string>('');
 
   const tabKey = useMemo(() => tabIndexToKey(tabValue), [tabValue]);
 
@@ -239,6 +240,7 @@ function App() {
   const handleChangeScheduleClick = (row: TableRowData) => {
     // 테이블에서 시간 변경 클릭 시: drawer는 열지 않고, 독립 모달만 오픈
     setTableScheduleRow(row);
+    setTableScheduleTime(row.time ?? '');
     setTableScheduleOpen(true);
   };
 
@@ -265,10 +267,10 @@ function App() {
         <PageWrapper>
           {tabValue === 0 && (
             <>
-              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography variant="h3">발송 예약</Typography>
-                <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600], mt: 0.5 }}>
-                  전체 발송 내역을 확인할 수 있어요. (발송 일시 필터는 기본 ‘오늘’)
+              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Typography variant="h3">CRM 메시지</Typography>
+                <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
+                  전체 발송 내역을 확인할 수 있어요.
                 </Typography>
               </Box>
 
@@ -287,11 +289,13 @@ function App() {
 
           {tabValue === 1 && (
             <>
-              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                 <Typography variant="h3">페르소나 유형</Typography>
-                <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600], mt: 0.5 }}>
+                <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
                   페르소나를 선택하면 상세 정보를 확인할 수 있어요!
                 </Typography>
+                </Box>
               </Box>
               <PersonaCloud items={personaCloudItemsToShow} onSelect={handlePersonaSelect} />
               <PersonaRankTable rows={personaRankRows} onSelectPersona={handlePersonaSelect} />
@@ -311,12 +315,15 @@ function App() {
         initialDialog={detailInitialDialog}
       />
 
-      <ScheduleChangeDialog
+      <ScheduleChangeModal
         open={tableScheduleOpen}
         row={tableScheduleRow}
+        value={tableScheduleTime}
+        onChange={setTableScheduleTime}
         onClose={() => {
           setTableScheduleOpen(false);
           setTableScheduleRow(null);
+          setTableScheduleTime('');
         }}
         onConfirm={(payload) => {
           // TODO: 실제 스케줄 변경 API 연동 필요

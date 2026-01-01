@@ -6,7 +6,6 @@ import {
   TableRow,
   Box,
   Stack,
-  Chip,
   Checkbox,
   ListItemText,
   TextField,
@@ -25,7 +24,7 @@ import type { SelectChangeEvent } from '@mui/material/Select';
 import { useMemo, useState, type ChangeEvent, type MouseEvent } from 'react';
 import { amoreTokens } from '../../styles/theme';
 import { StatusChip, type ChipStatus } from './Chip';
-import { statusLabelMap } from './statusLabels';
+import { statusLabelMap } from '../../features/reservations/statusLabels';
 import { Pagination } from './Pagination';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -39,6 +38,7 @@ import type { TableRowData } from '../../api/types';
 import { Button as AppButton } from './Button';
 import { Popover } from './Popover';
 import { channelBadgeSx, formatChannelLabel } from './channel';
+import { AppChip } from './Chip';
 
 /**
  * 테이블 데이터 구조 정의 (TypeScript)
@@ -214,7 +214,7 @@ export const DataTable = ({
     if (variant === 'today') return true;
 
     // 발송 추이: "발송 예정"일 때만 노출, "발송 완료"는 미노출
-    if (row.status === 'success') return false;
+    if (row.status !== 'info') return false;
     const scheduledAt = dayjs(`${row.date} ${row.time}`, 'YYYY-MM-DD HH:mm');
     if (!scheduledAt.isValid()) return false;
     return scheduledAt.isAfter(dayjs());
@@ -644,9 +644,10 @@ export const DataTable = ({
                 </StyledTd>
                 <StyledTd sx={{ whiteSpace: 'nowrap' }}>
                   {row.channel ? (
-                    <Chip
+                    <AppChip
                       size="small"
                       variant="outlined"
+                      tone="neutral"
                       label={formatChannelLabel(row.channel)}
                       sx={channelBadgeSx}
                     />

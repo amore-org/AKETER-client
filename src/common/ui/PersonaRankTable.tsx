@@ -1,12 +1,13 @@
 // src/common/ui/PersonaRankTable.tsx
 import type { ChangeEvent } from 'react';
 import { useMemo, useState } from 'react';
-import { Box, Chip, Table, TableBody, TableHead, TableRow, Typography } from '@mui/material';
+import { Box, Table, TableBody, TableHead, TableRow, Typography } from '@mui/material';
 import styled from 'styled-components';
 import type { PersonaProfile } from '../../api/types';
 import { amoreTokens } from '../../styles/theme';
 import { StyledRow, StyledTableContainer, StyledTd, StyledTh } from './DataTable';
 import { Pagination } from './Pagination';
+import { AppChip } from './Chip';
 
 type PersonaRankRow = {
   rank: number;
@@ -34,12 +35,13 @@ const Keywords = ({ values }: { values?: string[] }) => {
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
       {v.slice(0, 6).map((k, idx) => (
-        <Chip
+        <AppChip
           key={`${k}-${idx}`}
           label={k}
           size="small"
           variant="outlined"
-          sx={{ borderRadius: amoreTokens.radius.base, fontWeight: amoreTokens.typography.weight.medium }}
+          tone="neutral"
+          sx={{ fontWeight: amoreTokens.typography.weight.medium }}
         />
       ))}
       {v.length > 6 && (

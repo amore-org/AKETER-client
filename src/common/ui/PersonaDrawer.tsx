@@ -1,12 +1,12 @@
 // src/common/ui/PersonaDrawer.tsx
 import { useState } from 'react';
-import { Drawer, Box, Typography, IconButton, Divider, Stack, Chip } from '@mui/material';
+import { Drawer, Box, Typography, IconButton, Divider, Stack } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import styled from 'styled-components';
 import { amoreTokens } from '../../styles/theme';
 import type { PersonaProfile } from '../../api/types';
-import { StatusChip } from './Chip';
-import { getStatusLabel } from './statusLabels';
+import { AppChip, StatusChip } from './Chip';
+import { getStatusLabel } from '../../features/reservations/statusLabels';
 import { Button as AppButton } from './Button';
 import { DetailDrawer } from './DetailDrawer';
 import type { TableRowData } from './DataTable';
@@ -131,7 +131,7 @@ export const PersonaDrawer = ({ open, onClose, data }: PersonaDrawerProps) => {
               <InfoLabel sx={{ mt: '2px' }}>트렌드 키워드</InfoLabel>
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 {(data.trendKeywords?.length ? data.trendKeywords : ['-']).map((k, idx) => (
-                  <Chip key={`${k}-${idx}`} label={k} variant="outlined" size="small" sx={{ borderRadius: amoreTokens.radius.base }} />
+                  <AppChip key={`${k}-${idx}`} label={k} variant="outlined" size="small" tone="neutral" />
                 ))}
               </Stack>
             </InfoRow>
@@ -140,7 +140,7 @@ export const PersonaDrawer = ({ open, onClose, data }: PersonaDrawerProps) => {
               <InfoLabel sx={{ mt: '2px' }}>핵심 키워드</InfoLabel>
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 {(data.coreKeywords?.length ? data.coreKeywords : ['-']).map((k, idx) => (
-                  <Chip key={`${k}-${idx}`} label={k} variant="outlined" size="small" sx={{ borderRadius: amoreTokens.radius.base }} />
+                  <AppChip key={`${k}-${idx}`} label={k} variant="outlined" size="small" tone="neutral" />
                 ))}
               </Stack>
             </InfoRow>

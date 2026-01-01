@@ -127,17 +127,13 @@ const mapChannelLabel = (channelType: ChannelTypeDto): string => {
 const mapStatusToChipStatus = (status: ReservationStatusDto): ChipStatus => {
   switch (status) {
     case 'READY':
-      return 'info'; // 발송 대기
-    case 'PENDING':
-      return 'paused'; // 진행/대기(임시로 일시정지 UI 컬러 사용)
+      return 'info'; // 발송 예정
     case 'COMPLETED':
       return 'success'; // 발송 완료
-    case 'FAILED':
-      return 'warning'; // 실패(확인 필요)
     case 'CANCELED':
       return 'error'; // 발송 취소
     default:
-      return 'default';
+      return 'info';
   }
 };
 
