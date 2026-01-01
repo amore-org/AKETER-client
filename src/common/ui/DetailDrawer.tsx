@@ -10,8 +10,10 @@ import {
   Stack,
   Button,
   TextField,
+  Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import dayjs from 'dayjs';
 import { amoreTokens } from '../../styles/theme';
 import { AppChip, StatusChip } from './Chip';
 import type { TableRowData } from './DataTable';
@@ -19,6 +21,7 @@ import { getStatusLabel } from '../../features/reservations/statusLabels';
 import { Button as AppButton } from './Button';
 import { ConfirmModal, ScheduleChangeModal } from './ConfirmModal';
 import { channelBadgeSx } from './channel';
+import { cancelReservation, getReservationDetail, mapReservationDtoToTableRow, updateReservationSchedule } from '../../api/reservations';
 
 const DrawerWrapper = styled(Box)`
   width: 30rem; /* 480px */
@@ -55,6 +58,9 @@ interface DetailDrawerProps {
   data: TableRowData | null;
   onPersonaClick?: (row: TableRowData) => void;
   onProductClick?: (row: TableRowData) => void;
+  onShowToast?: (payload: { severity: 'success' | 'info' | 'warning' | 'error'; message: string; detail?: string }) => void;
+  onPatchRow?: (id: number, patch: Partial<TableRowData>) => void;
+  onReplaceRow?: (row: TableRowData) => void;
   /**
    * 테이블에서 아이콘 클릭 등으로 "열리자마자" 특정 모달을 띄워야 할 때 사용.
    * (렌더 시점 초기값으로만 사용; row 변경 시에는 App에서 key로 remount하는 방식 권장)
@@ -62,7 +68,17 @@ interface DetailDrawerProps {
   initialDialog?: 'schedule' | 'cancel' | null;
 }
 
-export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductClick, initialDialog = null }: DetailDrawerProps) => {
+export const DetailDrawer = ({
+  open,
+  onClose,
+  data,
+  onPersonaClick,
+  onProductClick,
+  onShowToast,
+  onPatchRow,
+  onReplaceRow,
+  initialDialog = null,
+}: DetailDrawerProps) => {
   const canEditSchedule = Boolean(data && data.status === 'info');
 
   const statusLabel = useMemo(() => {
@@ -113,12 +129,13 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-              <StatusChip status={data.status} label={statusLabel} />
-                {data.channel ? (
+            {data.channel ? (
                   <AppChip size="small" variant="outlined" tone="neutral" label={data.channel} sx={channelBadgeSx} />
                 ) : (
                   <Typography variant="body2">-</Typography>
                 )}
+              <StatusChip status={data.status} label={statusLabel} />
+                
 
                 <Typography variant="body2">
                   {data.recipientCount != null ? `${data.recipientCount.toLocaleString()}명` : '-'}
@@ -144,13 +161,21 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
               <InfoLabel>타겟 페르소나</InfoLabel>
               <Box sx={{ minWidth: 0 }}>
                 {onPersonaClick ? (
-                  <AppButton
-                    variant="link"
-                    linkKind="internal"
-                    onClick={() => onPersonaClick(data)}
-                  >
-                    {data.persona}
-                  </AppButton>
+                  <Tooltip title="페르소나 상세로 이동해요.">
+                    <span>
+                      <AppButton
+                        variant="link"
+                        linkKind="internal"
+                        onClick={() => {
+                          onPersonaClick(data);
+                          // 드로어가 겹치지 않게 현재(발송 상세) 드로어는 닫는다.
+                          onClose();
+                        }}
+                      >
+                        {data.persona}
+                      </AppButton>
+                    </span>
+                  </Tooltip>
                 ) : (
                   <Typography variant="body1" sx={{ fontWeight: 600 }}>
                     {data.persona}
@@ -163,13 +188,17 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
               <InfoLabel>대상 상품</InfoLabel>
               <Box sx={{ minWidth: 0 }}>
                 {onProductClick ? (
-                  <AppButton
-                    variant="link"
-                    linkKind="external"
-                    onClick={() => onProductClick(data)}
-                  >
-                    {data.product}
-                  </AppButton>
+                  <Tooltip title="아모레몰 상품 상세로 이동해요.">
+                    <span>
+                      <AppButton
+                        variant="link"
+                        linkKind="external"
+                        onClick={() => onProductClick(data)}
+                      >
+                        {data.product}
+                      </AppButton>
+                    </span>
+                  </Tooltip>
                 ) : (
                   <Typography variant="body2">{data.product}</Typography>
                 )}
@@ -206,32 +235,30 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
           </Stack>
         </Box>
 
-        {/* 3. 푸터 버튼 */}
-        <Box sx={{ pt: 2 }}>
-          <Divider sx={{ mb: 2 }} />
-          <Stack spacing={1}>
-            {canEditSchedule ? (
-              <>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={handleChangeSchedule}
-                  sx={{ bgcolor: amoreTokens.colors.brand.pacificBlue }}
-                >
-                  시간 변경
-                </Button>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={handleCancelSend}
-                  sx={{ borderColor: amoreTokens.colors.navy[300], color: amoreTokens.colors.navy[700] }}
-                >
-                  발송 취소
-                </Button>
-              </>
-            ) : null}
-          </Stack>
-        </Box>
+        {/* 3. 푸터 버튼(발송 대기일 때만 노출) */}
+        {canEditSchedule ? (
+          <Box sx={{ pt: 2 }}>
+            <Divider sx={{ mb: 2 }} />
+            <Stack spacing={1}>
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleChangeSchedule}
+                sx={{ bgcolor: amoreTokens.colors.brand.pacificBlue }}
+              >
+                시간 변경
+              </Button>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleCancelSend}
+                sx={{ borderColor: amoreTokens.colors.navy[300], color: amoreTokens.colors.navy[700] }}
+              >
+                발송 취소
+              </Button>
+            </Stack>
+          </Box>
+        ) : null}
 
         <ScheduleChangeModal
           open={scheduleModalOpen}
@@ -240,8 +267,21 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
           onChange={setNextTime}
           onClose={() => setScheduleModalOpen(false)}
           onConfirm={(payload) => {
-            // TODO: 실제 스케줄 변경 API 연동 필요
             console.log('[발송 시간 변경]', payload);
+            void (async () => {
+              try {
+                const scheduledAt = dayjs(`${data.date} ${nextTime}`, 'YYYY-MM-DD HH:mm').format('YYYY-MM-DDTHH:mm:00');
+                await updateReservationSchedule(data.id, scheduledAt);
+                const fresh = await getReservationDetail(data.id);
+                const mapped = mapReservationDtoToTableRow(fresh);
+                onReplaceRow?.(mapped);
+                onPatchRow?.(data.id, mapped);
+                onShowToast?.({ severity: 'success', message: '시간을 변경했어요.', detail: `변경 후: ${payload.after}` });
+              } catch (e) {
+                console.error(e);
+                onShowToast?.({ severity: 'error', message: '시간 변경에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+              }
+            })();
           }}
         />
 
@@ -250,7 +290,7 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
           open={cancelDialogOpen}
           onClose={() => setCancelDialogOpen(false)}
           title="발송 취소"
-          tone='primary'
+          tone='danger'
           confirmText="취소 확정"
           cancelText="닫기"
           description={
@@ -272,9 +312,21 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
             />
           }
           onConfirm={() => {
-            // TODO: 실제 취소 API 연동 필요
             console.log('[발송 취소]', { id: data.id, reason: cancelReason });
-            setCancelDialogOpen(false);
+            void (async () => {
+              try {
+                await cancelReservation(data.id, cancelReason);
+                const fresh = await getReservationDetail(data.id);
+                const mapped = mapReservationDtoToTableRow(fresh);
+                onReplaceRow?.(mapped);
+                onPatchRow?.(data.id, mapped);
+                setCancelDialogOpen(false);
+                onShowToast?.({ severity: 'success', message: '발송을 취소했어요.', detail: `#${data.id} · ${data.persona}` });
+              } catch (e) {
+                console.error(e);
+                onShowToast?.({ severity: 'error', message: '발송 취소에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+              }
+            })();
           }}
         />
       </DrawerWrapper>

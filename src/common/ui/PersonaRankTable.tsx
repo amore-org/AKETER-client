@@ -8,6 +8,7 @@ import { amoreTokens } from '../../styles/theme';
 import { StyledRow, StyledTableContainer, StyledTd, StyledTh } from './DataTable';
 import { Pagination } from './Pagination';
 import { AppChip } from './Chip';
+import { formatKoreanLevelLabel, personaLevelChipSx } from './personaLevel';
 
 type PersonaRankRow = {
   rank: number;
@@ -39,7 +40,7 @@ const Keywords = ({ values }: { values?: string[] }) => {
           key={`${k}-${idx}`}
           label={k}
           size="small"
-          variant="outlined"
+          variant="filled"
           tone="neutral"
           sx={{ fontWeight: amoreTokens.typography.weight.medium }}
         />
@@ -106,9 +107,33 @@ export const PersonaRankTable = ({ rows, onSelectPersona }: PersonaRankTableProp
                   <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.ageGroup ?? '-'}</StyledTd>
                   <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.mainCategory ?? '-'}</StyledTd>
                   <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.purchaseMethod ?? '-'}</StyledTd>
-                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.brandLoyalty ?? '-'}</StyledTd>
-                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.priceSensitivity ?? '-'}</StyledTd>
-                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.benefitSensitivity ?? '-'}</StyledTd>
+                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                    <AppChip
+                      label={formatKoreanLevelLabel(r.profile.brandLoyalty)}
+                      size="small"
+                      variant="filled"
+                      tone="neutral"
+                      sx={{ ...personaLevelChipSx(r.profile.brandLoyalty) }}
+                    />
+                  </StyledTd>
+                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                    <AppChip
+                      label={formatKoreanLevelLabel(r.profile.priceSensitivity)}
+                      size="small"
+                      variant="filled"
+                      tone="neutral"
+                      sx={{ ...personaLevelChipSx(r.profile.priceSensitivity) }}
+                    />
+                  </StyledTd>
+                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                    <AppChip
+                      label={formatKoreanLevelLabel(r.profile.benefitSensitivity)}
+                      size="small"
+                      variant="filled"
+                      tone="neutral"
+                      sx={{ ...personaLevelChipSx(r.profile.benefitSensitivity) }}
+                    />
+                  </StyledTd>
                   <StyledTd>
                     <Keywords values={r.profile.trendKeywords} />
                   </StyledTd>

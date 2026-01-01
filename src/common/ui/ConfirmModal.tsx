@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography, Button, TextField } from '@mui/material';
+import { Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography, Button as MuiButton, TextField } from '@mui/material';
 import { amoreTokens } from '../../styles/theme';
 import type { TableRowData } from './DataTable';
+import { Button as AppButton } from './Button';
 
 export type ConfirmModalTone = 'primary' | 'danger';
 
@@ -55,7 +56,8 @@ export const ConfirmModal = ({
         sx={{
           fontSize: amoreTokens.typography.size.h3,
           fontWeight: amoreTokens.typography.weight.bold,
-          color: tone === 'danger' ? confirmColor : amoreTokens.colors.navy[700],
+          // tone은 "버튼 색상"만 제어한다. 타이틀 색상은 항상 동일하게 유지한다.
+          color: amoreTokens.colors.navy[700],
         }}
       >
         {title}
@@ -71,17 +73,17 @@ export const ConfirmModal = ({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button variant="outlined" onClick={onClose}>
+        <AppButton variant="secondary-outlined" onClick={onClose}>
           {cancelText}
-        </Button>
-        <Button
+        </AppButton>
+        <MuiButton
           variant="contained"
           onClick={onConfirm}
           disabled={confirmDisabled}
           sx={{ bgcolor: confirmColor }}
         >
           {confirmText}
-        </Button>
+        </MuiButton>
       </DialogActions>
     </Dialog>
   );
@@ -121,7 +123,7 @@ export const ScheduleChangeModal = ({ open, row, onClose, value, onChange, onCon
             채널 {row.channel ?? '-'} · 대상 {row.recipientCount != null ? `${row.recipientCount.toLocaleString()}명` : '-'}
           </>
         ) : (
-          '선택된 항목이 없습니다.'
+          '선택된 항목이 없어요.'
         )
       }
       content={

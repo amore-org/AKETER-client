@@ -268,7 +268,7 @@ export const DataTable = ({
                   초기화
                 </Button>
                 <Button size="small" variant="contained" onClick={closePopover}>
-                  닫기
+                  저장
                 </Button>
               </Stack>
             </Stack>
@@ -305,7 +305,7 @@ export const DataTable = ({
                   초기화
                 </Button>
                 <Button size="small" variant="contained" onClick={closePopover}>
-                  닫기
+                  저장
                 </Button>
               </Stack>
             </Stack>
@@ -347,7 +347,7 @@ export const DataTable = ({
                   초기화
                 </Button>
                 <Button size="small" variant="contained" onClick={closePopover}>
-                  닫기
+                  저장
                 </Button>
               </Stack>
             </Stack>
@@ -390,7 +390,7 @@ export const DataTable = ({
                   초기화
                 </Button>
                 <Button size="small" variant="contained" onClick={closePopover}>
-                  닫기
+                  저장
                 </Button>
               </Stack>
             </Stack>
@@ -435,7 +435,7 @@ export const DataTable = ({
                   초기화
                 </Button>
                 <Button size="small" variant="contained" onClick={closePopover}>
-                  닫기
+                  저장
                 </Button>
               </Stack>
             </Stack>
@@ -471,7 +471,7 @@ export const DataTable = ({
                   초기화
                 </Button>
                 <Button size="small" variant="contained" onClick={closePopover}>
-                  닫기
+                  저장
                 </Button>
               </Stack>
             </Stack>
@@ -602,7 +602,7 @@ export const DataTable = ({
               >
                 <StyledTd sx={{ minWidth: '12rem', fontWeight: 600 }}>
                   {onPersonaClick ? (
-                    <Tooltip title="클릭하면 페르소나 상세 Drawer가 열립니다.">
+                    <Tooltip title="페르소나 상세로 이동해요.">
                       <span>
                         <AppButton
                           variant="link"
@@ -623,7 +623,7 @@ export const DataTable = ({
                 </StyledTd>
                 <StyledTd sx={{ minWidth: '10rem' }}>
                   {onProductClick ? (
-                    <Tooltip title="클릭하면 상품 상세 페이지로 이동합니다.">
+                    <Tooltip title="아모레몰 상품 상세로 이동해요.">
                       <span>
                         <AppButton
                           variant="link"
@@ -703,7 +703,7 @@ export const DataTable = ({
           ) : (
             <TableRow>
               <StyledTd colSpan={emptyColSpan} align="center" sx={{ py: 10 }}>
-                데이터가 존재하지 않습니다.
+                데이터가 없어요.
               </StyledTd>
             </TableRow>
           )}

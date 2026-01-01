@@ -17,6 +17,8 @@ import { PersonaCloud, type PersonaCloudItem } from './common/ui/PersonaCloud';
 import { PersonaRankTable } from './common/ui/PersonaRankTable';
 import { ScheduleChangeModal } from './common/ui/ConfirmModal';
 import { buildTrendRowsRaw, personaBaseRaw } from './features/reservations/mockData';
+import { AppToast, type ToastState } from './common/ui/Toast';
+import { getReservationDetail, mapReservationDtoToTableRow, updateReservationSchedule } from './api/reservations';
 
 const NAVBAR_HEIGHT = amoreTokens.spacing(8);
 const TABS_HEIGHT = amoreTokens.spacing(6);
@@ -86,6 +88,17 @@ function App() {
   const [tableScheduleRow, setTableScheduleRow] = useState<TableRowData | null>(null);
   const [tableScheduleTime, setTableScheduleTime] = useState<string>('');
 
+  const [toast, setToast] = useState<ToastState>({
+    open: false,
+    severity: 'success',
+    message: '',
+    detail: undefined,
+  });
+
+  const showToast = (payload: Omit<ToastState, 'open'>) => {
+    setToast({ open: true, ...payload });
+  };
+
   const tabKey = useMemo(() => tabIndexToKey(tabValue), [tabValue]);
 
   const todayStr = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
@@ -94,12 +107,13 @@ function App() {
     () => normalizeSendRows(buildTrendRowsRaw(todayStr), defaultFieldMapping),
     [todayStr],
   );
+  const [trendRows, setTrendRows] = useState<TableRowData[]>(() => normalizedTrendRows);
 
   const personaBase = useMemo(() => normalizePersonaProfiles(personaBaseRaw, defaultFieldMapping), []);
 
   const personaProfiles = useMemo(() => {
     const byPersonaId = new Map<string, TableRowData[]>();
-    normalizedTrendRows.forEach((r) => {
+    trendRows.forEach((r) => {
       const key = r.personaId ?? r.persona;
       const arr = byPersonaId.get(key) ?? [];
       arr.push(r);
@@ -120,7 +134,7 @@ function App() {
         recentSends: recent.map((r) => ({ id: r.id, date: r.date, time: r.time, product: r.product, title: r.title, status: r.status })),
       };
     });
-  }, [normalizedTrendRows, personaBase]);
+  }, [personaBase, trendRows]);
 
   const personaProfilesForCloud = useMemo(() => {
     if (!USE_PERSONA_CLOUD_MOCK) return personaProfiles;
@@ -147,7 +161,7 @@ function App() {
   const personaCloudItems: PersonaCloudItem[] = useMemo(() => {
     const counts = new Map<string, number>();
     let totalCount = 0;
-    normalizedTrendRows.forEach((r) => {
+    trendRows.forEach((r) => {
       const key = r.personaId ?? r.persona;
       counts.set(key, (counts.get(key) ?? 0) + 1);
       totalCount += 1;
@@ -169,7 +183,7 @@ function App() {
       const isTop = maxCount > 0 && c === maxCount;
       return { personaId, label: p.persona, weight, count: c, ratio, isTop, value: displayCount };
     });
-  }, [normalizedTrendRows, personaProfiles]);
+  }, [personaProfiles, trendRows]);
 
   const mockPersonaCloudItems: PersonaCloudItem[] = useMemo(() => {
     // personaProfilesForCloud 순서대로 count를 강제로 지정(비중 UI 확인용)
@@ -221,14 +235,37 @@ function App() {
 
   const openPersonaByRow = (row: TableRowData) => {
     const key = row.personaId ?? row.persona;
-    const found = personaProfiles.find((p) => p.personaId === key) ?? personaProfiles.find((p) => p.persona === row.persona) ?? null;
-    setSelectedPersona(found);
+    const found =
+      personaProfiles.find((p) => p.personaId === key) ?? personaProfiles.find((p) => p.persona === row.persona) ?? null;
+    setSelectedPersona(
+      found ?? {
+        personaId: String(key),
+        persona: row.persona,
+        trendKeywords: [],
+        coreKeywords: [],
+        recentSends: [],
+      },
+    );
     setPersonaDrawerOpen(true);
   };
 
   const handlePersonaSelect = (personaId: string) => {
-    const found = (USE_PERSONA_CLOUD_MOCK ? personaProfilesForCloud : personaProfiles).find((p) => p.personaId === personaId) ?? null;
-    setSelectedPersona(found);
+    const pool = USE_PERSONA_CLOUD_MOCK ? personaProfilesForCloud : personaProfiles;
+    // 워드클라우드/랭킹 테이블에서 넘어오는 값이 personaId가 아닐 수도 있어 fallback을 둔다.
+    const found =
+      pool.find((p) => p.personaId === personaId) ??
+      pool.find((p) => p.persona === personaId) ??
+      null;
+    // 그래도 못 찾으면, 최소 정보로라도 드로어가 열리도록 fallback 프로필을 만든다.
+    setSelectedPersona(
+      found ?? {
+        personaId: String(personaId),
+        persona: String(personaId),
+        trendKeywords: [],
+        coreKeywords: [],
+        recentSends: [],
+      },
+    );
     setPersonaDrawerOpen(true);
   };
 
@@ -242,6 +279,16 @@ function App() {
     setTableScheduleRow(row);
     setTableScheduleTime(row.time ?? '');
     setTableScheduleOpen(true);
+  };
+
+  const replaceRow = (next: TableRowData) => {
+    setTrendRows((prev) => prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)));
+    setSelectedRow((prev) => (prev?.id === next.id ? { ...prev, ...next } : prev));
+  };
+
+  const patchRow = (id: number, patch: Partial<TableRowData>) => {
+    setTrendRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    setSelectedRow((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
   };
 
   useEffect(() => {
@@ -275,7 +322,7 @@ function App() {
               </Box>
 
               <DataTable
-                rows={normalizedTrendRows}
+                rows={trendRows}
                 onRowClick={handleRowClick}
                 onPersonaClick={openPersonaByRow}
                 onProductClick={handleProductClick}
@@ -313,6 +360,9 @@ function App() {
         onPersonaClick={openPersonaByRow}
         onProductClick={handleProductClick}
         initialDialog={detailInitialDialog}
+        onShowToast={showToast}
+        onReplaceRow={replaceRow}
+        onPatchRow={patchRow}
       />
 
       <ScheduleChangeModal
@@ -326,8 +376,19 @@ function App() {
           setTableScheduleTime('');
         }}
         onConfirm={(payload) => {
-          // TODO: 실제 스케줄 변경 API 연동 필요
           console.log('[테이블 시간 변경]', payload);
+          void (async () => {
+            try {
+              const scheduledAt = dayjs(payload.after, 'YYYY-MM-DD HH:mm').format('YYYY-MM-DDTHH:mm:00');
+              await updateReservationSchedule(payload.id, scheduledAt);
+              const fresh = await getReservationDetail(payload.id);
+              replaceRow(mapReservationDtoToTableRow(fresh));
+              showToast({ severity: 'success', message: '발송 시간을 변경했어요.', detail: `변경 후: ${payload.after}` });
+            } catch (e) {
+              console.error(e);
+              showToast({ severity: 'error', message: '시간 변경에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+            }
+          })();
         }}
       />
 
@@ -335,11 +396,14 @@ function App() {
         open={personaDrawerOpen}
         onClose={() => setPersonaDrawerOpen(false)}
         data={selectedPersona}
-        onOpenHistory={() => {
+        onOpenHistory={(personaId) => {
+          void personaId;
           const base = `${window.location.origin}${window.location.pathname}`;
           window.open(`${base}#/reservations`, '_blank', 'noopener,noreferrer');
         }}
       />
+
+      <AppToast toast={toast} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />
     </Box>
   );
 }

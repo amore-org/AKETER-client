@@ -39,7 +39,7 @@ const toneToColors = (tone: AppChipTone) => {
     case 'neutral':
     default:
       return {
-        bg: amoreTokens.colors.common.white,
+        bg: amoreTokens.colors.gray[50],
         fg: amoreTokens.colors.gray[600],
         border: amoreTokens.colors.gray[300],
       };
