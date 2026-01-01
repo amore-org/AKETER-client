@@ -10,12 +10,6 @@ import {
   Stack,
   Button,
   Chip,
-  List,
-  ListItem,
-  ListItemText,
-  Checkbox,
-  ListItemIcon,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -30,8 +24,7 @@ import { getStatusLabel } from './statusLabels';
 import dayjs from 'dayjs';
 import { Button as AppButton } from './Button';
 import { ConfirmModal } from './ConfirmModal';
-
-const EMPTY_RECIPIENTS: NonNullable<TableRowData['failedRecipients']> = [];
+import { channelBadgeSx } from './channel';
 
 const DrawerWrapper = styled(Box)`
   width: 30rem; /* 480px */
@@ -72,32 +65,19 @@ interface DetailDrawerProps {
    * 테이블에서 아이콘 클릭 등으로 "열리자마자" 특정 모달을 띄워야 할 때 사용.
    * (렌더 시점 초기값으로만 사용; row 변경 시에는 App에서 key로 remount하는 방식 권장)
    */
-  initialDialog?: 'schedule' | 'cancel' | 'reprocess' | null;
+  initialDialog?: 'schedule' | 'cancel' | null;
 }
 
 export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductClick, initialDialog = null }: DetailDrawerProps) => {
-  const failedRecipients = data?.failedRecipients ?? EMPTY_RECIPIENTS;
-
   const isTrend = useMemo(() => {
     if (!data) return false;
     return data.successCount != null || data.errorCount != null || data.optoutCount != null;
   }, [data]);
 
-  const hasFailure = useMemo(() => {
-    if (!data) return false;
-    return (data.errorCount ?? 0) > 0 || (data.optoutCount ?? 0) > 0 || failedRecipients.length > 0;
-  }, [data, failedRecipients.length]);
-
   const statusLabel = useMemo(() => {
     if (!data) return '';
-    if (isTrend) return hasFailure ? '실패' : '성공';
     return getStatusLabel(data.status);
-  }, [data, hasFailure, isTrend]);
-
-  const successCount = data?.successCount ?? 0;
-  const failureCount = (data?.errorCount ?? 0) + (data?.optoutCount ?? 0);
-
-  const [selectedUserIds, setSelectedUserIds] = useState<Record<string, boolean>>({});
+  }, [data]);
 
   const initialSchedule = useMemo(() => {
     if (!data) return { time: '', open: false };
@@ -114,34 +94,6 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(initialDialog === 'cancel');
   const [cancelReason, setCancelReason] = useState('');
-
-  const [reprocessDialogOpen, setReprocessDialogOpen] = useState(initialDialog === 'reprocess');
-
-  const channelBadgeSx = {
-    borderRadius: amoreTokens.radius.base,
-    borderColor: amoreTokens.colors.gray[300],
-    color: amoreTokens.colors.gray[500],
-    bgcolor: amoreTokens.colors.common.white,
-    fontWeight: amoreTokens.typography.weight.semibold,
-  } as const;
-
-  const toggleUser = (userId: string) => {
-    setSelectedUserIds((prev) => ({ ...prev, [userId]: !prev[userId] }));
-  };
-
-  const selectedErrorUserIds = useMemo(
-    () =>
-      failedRecipients
-    .filter((r) => r.failureType === 'error' && selectedUserIds[r.userId])
-    .map((r) => r.userId),
-    [failedRecipients, selectedUserIds],
-  );
-
-  const handleRequestReprocess = () => {
-    // TODO: 실제 재처리 API 연동 필요 (유저 ID 단위)
-    if (!data) return;
-    console.log('[재처리 요청]', { sendId: data.id, userIds: selectedErrorUserIds });
-  };
 
   const handleChangeSchedule = () => {
     if (!data) return;
@@ -182,15 +134,7 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-              {isTrend ? (
-                <>
-                  {successCount > 0 ? <StatusChip status="success" label={`성공 ${successCount}건`} /> : null}
-                  {failureCount > 0 ? <StatusChip status="error" label={`실패 ${failureCount}건`} /> : null}
-                  {successCount === 0 && failureCount === 0 ? <StatusChip status={data.status} label={statusLabel} /> : null}
-                </>
-              ) : (
-                <StatusChip status={data.status} label={statusLabel} />
-              )}
+              <StatusChip status={data.status} label={statusLabel} />
             </Stack>
           </Stack>
           <IconButton onClick={onClose} size="small" sx={{ alignSelf: 'flex-start' }}>
@@ -289,88 +233,6 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
                 </Box>
               </Stack>
             </Box>
-
-            {isTrend && hasFailure && (
-              <Box sx={{ border: `1px solid ${amoreTokens.colors.gray[200]}`, p: 2, borderRadius: amoreTokens.radius.base }}>
-                <Stack spacing={1} margin={0}>
-                  <Box display="flex" flexDirection="row" gap={1} alignItems="center">
-                    <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                      실패 항목
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[700] }}>
-                      오류 {(data.errorCount ?? 0).toLocaleString()}건 · 수신거부 {(data.optoutCount ?? 0).toLocaleString()}건
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[400] }}>
-                    * 재처리는 유저 ID 단위이며, ‘오류’로 분류된 유저만 요청할 수 있습니다.
-                  </Typography>
-                  <div>
-                    {failedRecipients.length > 0 ? (
-                      <List dense sx={{ p: 0, m: 0 }}>
-                        {failedRecipients.map((r) => {
-                          const disabled = r.failureType === 'optout';
-                          const checked = Boolean(selectedUserIds[r.userId]);
-                          const rowLabel = `${r.name} (${r.userId})`;
-                          const reasonLabel = r.failureType === 'error' ? '오류' : '수신 거부';
-                          const disabledReason = '수신 거부 건은 재처리할 수 없습니다.';
-                          const enabledHint = '오류 건만 선택해 재처리 요청할 수 있습니다.';
-                          const tooltipTitle = disabled ? disabledReason : enabledHint;
-                          return (
-                            <Tooltip key={r.userId} title={tooltipTitle} placement="top" arrow>
-                              <Box>
-                                <ListItem
-                                  sx={{
-                                    px: 0,
-                                    py: 0.25,
-                                    cursor: disabled ? 'not-allowed' : 'pointer',
-                                    opacity: disabled ? 0.45 : 1,
-                                    '&:hover': {
-                                      bgcolor: disabled ? 'transparent' : amoreTokens.colors.blue[50],
-                                    },
-                                  }}
-                                  disableGutters
-                                  secondaryAction={
-                                    <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[600] }}>
-                                      {reasonLabel}
-                                      {r.failureMessage ? ` · ${r.failureMessage}` : ''}
-                                    </Typography>
-                                  }
-                                  onClick={!disabled ? () => toggleUser(r.userId) : undefined}
-                                >
-                                  <ListItemIcon sx={{ minWidth: '2rem' }}>
-                                    <span style={{ display: 'inline-flex', cursor: disabled ? 'not-allowed' : 'pointer' }}>
-                                      <Checkbox
-                                        edge="start"
-                                        size="small"
-                                        disabled={disabled}
-                                        checked={checked}
-                                        tabIndex={-1}
-                                        disableRipple
-                                      />
-                                    </span>
-                                  </ListItemIcon>
-                                  <ListItemText
-                                    primaryTypographyProps={{
-                                      variant: 'body2',
-                                      sx: { color: disabled ? amoreTokens.colors.gray[400] : undefined },
-                                    }}
-                                    primary={rowLabel}
-                                  />
-                                </ListItem>
-                              </Box>
-                            </Tooltip>
-                          );
-                        })}
-                      </List>
-                    ) : (
-                      <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-                        실패자가 없습니다.
-                      </Typography>
-                    )}
-                  </div>
-                </Stack>
-              </Box>
-            )}
           </Stack>
         </Box>
 
@@ -378,19 +240,7 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
         <Box sx={{ pt: 2 }}>
           <Divider sx={{ mb: 2 }} />
           <Stack spacing={1}>
-            {isTrend ? (
-              hasFailure ? (
-              <Button
-                fullWidth
-                variant="contained"
-                onClick={() => setReprocessDialogOpen(true)}
-                disabled={selectedErrorUserIds.length === 0}
-                sx={{ bgcolor: amoreTokens.colors.brand.pacificBlue }}
-              >
-                재처리 요청
-              </Button>
-              ) : null
-            ) : (
+            {isTrend ? null : (
               <>
                 <Button
                   fullWidth
@@ -518,29 +368,6 @@ export const DetailDrawer = ({ open, onClose, data, onPersonaClick, onProductCli
             // TODO: 실제 취소 API 연동 필요
             console.log('[발송 취소]', { id: data.id, reason: cancelReason });
             setCancelDialogOpen(false);
-          }}
-        />
-
-        {/* 재처리 요청 Confirm Modal */}
-        <ConfirmModal
-          open={reprocessDialogOpen}
-          onClose={() => setReprocessDialogOpen(false)}
-          title="재처리 요청"
-          confirmText="요청 확정"
-          cancelText="닫기"
-          confirmDisabled={selectedErrorUserIds.length === 0}
-          description={
-            <>
-              ID #{data.id} · 선택된 오류 유저 {selectedErrorUserIds.length}명
-              <br />
-              <Typography component="span" variant="caption" sx={{ color: amoreTokens.colors.gray[600] }}>
-                수신거부 유저는 선택/재처리할 수 없습니다.
-              </Typography>
-            </>
-          }
-          onConfirm={() => {
-            handleRequestReprocess();
-            setReprocessDialogOpen(false);
           }}
         />
       </DrawerWrapper>

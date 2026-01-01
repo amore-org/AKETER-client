@@ -58,7 +58,7 @@ type MainTabsProps = {
 export const MainTabs = ({
   value,
   onChange,
-  tabs = [{ label: '오늘 발송 예약' }, { label: '페르소나 유형' }, { label: '발송 추이 확인' }],
+  tabs = [{ label: '발송 예약' }, { label: '페르소나 유형' }],
   ariaLabel = 'crm main tabs',
 }: MainTabsProps) => {
   const handleChange = (_event: React.SyntheticEvent, newValue: number) => {

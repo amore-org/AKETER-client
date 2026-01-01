@@ -38,6 +38,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import type { TableRowData } from '../../api/types';
 import { Button as AppButton } from './Button';
 import { Popover } from './Popover';
+import { channelBadgeSx, formatChannelLabel } from './channel';
 
 /**
  * 테이블 데이터 구조 정의 (TypeScript)
@@ -52,6 +53,11 @@ interface DataTableProps {
   onPersonaClick?: (row: TableRowData) => void;
   onProductClick?: (row: TableRowData) => void;
   onChangeScheduleClick?: (row: TableRowData) => void;
+  /**
+   * 발송일(날짜) 필터의 초기값.
+   * 예: 통합 탭에서 기본값을 '오늘'로 맞추기 위해 사용.
+   */
+  defaultSelectedDate?: Dayjs | null;
   pageSize?: number;
   variant?: DataTableVariant;
 }
@@ -104,10 +110,11 @@ export const DataTable = ({
   onPersonaClick,
   onProductClick,
   onChangeScheduleClick,
+  defaultSelectedDate,
   pageSize = 10,
   variant = 'today',
 }: DataTableProps) => {
-  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(() => defaultSelectedDate ?? null);
   const [timeFilter, setTimeFilter] = useState<string>(''); // HH:mm
   const [statusFilter, setStatusFilter] = useState<'all' | ChipStatus>('all');
   const [personaSelected, setPersonaSelected] = useState<string[]>([]);
@@ -131,22 +138,11 @@ export const DataTable = ({
     const timeStr = variant === 'today' ? timeFilter.trim() : '';
     const productQ = productQuery.trim().toLowerCase();
 
-    const isTrendFailure = (row: TableRowData) => {
-      const failCount = (row.errorCount ?? 0) + (row.optoutCount ?? 0);
-      return failCount > 0 || (row.failedRecipients?.length ?? 0) > 0 || row.status === 'error';
-    };
-
     return rows.filter((row) => {
       if (dateStr && row.date !== dateStr) return false;
       if (timeStr && row.time !== timeStr) return false;
       if (statusFilter !== 'all') {
-        if (variant === 'trend') {
-          const failure = isTrendFailure(row);
-          if (statusFilter === 'success' && failure) return false;
-          if (statusFilter === 'error' && !failure) return false; // error 값을 "실패"로 사용
-        } else {
-          if (row.status !== statusFilter) return false;
-        }
+        if (row.status !== statusFilter) return false;
       }
       if (personaSelected.length > 0 && !personaSelected.includes(row.persona)) return false;
       if (channelFilter !== 'all' && row.channel !== channelFilter) return false;
@@ -172,19 +168,13 @@ export const DataTable = ({
   const popoverOpen = Boolean(popover.key && popover.anchorEl);
   const popoverId = popoverOpen && popover.key ? `datatable-filter-${popover.key}` : undefined;
 
-  // 컬럼 수: 페르소나, 발송시간/일시, 채널, 상품명, 메시지, 상태/결과요약
+  // 컬럼 수: 페르소나, 상품명, 채널, 메시지, 발송시간/일시, 상태
   const emptyColSpan = 6;
 
   const headerIconButtonSx = {
     p: 0.25,
     fontSize: '1rem',
   } as const;
-
-  const formatChannel = (channel?: string) => {
-    if (!channel) return '-';
-    if (channel === '카카오톡 알림톡') return '알림톡';
-    return channel;
-  };
 
   const personaOptions = useMemo(() => {
     const set = new Set<string>();
@@ -197,20 +187,20 @@ export const DataTable = ({
     rows.forEach((r) => {
       if (!r.channel) return;
       // label은 사용자에게 보여주는 값, value는 실제 row.channel 값
-      map.set(formatChannel(r.channel), r.channel);
+      map.set(formatChannelLabel(r.channel), r.channel);
     });
     return Array.from(map.entries())
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
   }, [rows]);
 
-  const channelBadgeSx = {
-    borderRadius: amoreTokens.radius.base,
-    borderColor: amoreTokens.colors.gray[300],
-    color: amoreTokens.colors.gray[500],
-    bgcolor: amoreTokens.colors.common.white,
-    fontWeight: amoreTokens.typography.weight.semibold,
-  } as const;
+  const statusOptions = useMemo(() => {
+    const set = new Set<ChipStatus>();
+    rows.forEach((r) => set.add(r.status));
+    return Array.from(set)
+      .map((s) => ({ value: s, label: statusLabelMap[s] }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+  }, [rows]);
 
   const truncateText = (text: string, maxLen: number) => {
     const t = (text ?? '').trim();
@@ -324,7 +314,7 @@ export const DataTable = ({
           {popover.key === 'status' && (
             <Stack spacing={1.5}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                {variant === 'trend' ? '성공/실패 필터' : '상태 필터'}
+                상태 필터
               </Typography>
               <FormControl size="small" fullWidth>
                 <InputLabel id="status-filter-label">상태</InputLabel>
@@ -336,18 +326,11 @@ export const DataTable = ({
                   MenuProps={{ disablePortal: true }}
                 >
                   <MenuItem value="all">전체</MenuItem>
-                  {variant === 'trend' ? (
-                    <>
-                      <MenuItem value="success">성공</MenuItem>
-                      <MenuItem value="error">실패</MenuItem>
-                    </>
-                  ) : (
-                    <>
-                      <MenuItem value="success">발송 완료</MenuItem>
-                      <MenuItem value="error">발송 취소</MenuItem>
-                      <MenuItem value="info">발송 대기</MenuItem>
-                    </>
-                  )}
+                  {statusOptions.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               <Divider />
@@ -591,8 +574,8 @@ export const DataTable = ({
             </StyledTh>
             <StyledTh align="center">
               <Stack direction="row" spacing={0.25} alignItems="center" justifyContent="center">
-                <Box component="span">{variant === 'trend' ? '결과 요약' : '상태'}</Box>
-                <Tooltip title={variant === 'trend' ? '결과 필터' : '상태 필터'}>
+                <Box component="span">상태</Box>
+                <Tooltip title="상태 필터">
                   <IconButton
                     size="small"
                     onClick={openPopover('status')}
@@ -664,7 +647,7 @@ export const DataTable = ({
                     <Chip
                       size="small"
                       variant="outlined"
-                      label={formatChannel(row.channel)}
+                      label={formatChannelLabel(row.channel)}
                       sx={channelBadgeSx}
                     />
                   ) : (
@@ -712,17 +695,7 @@ export const DataTable = ({
                   </Stack>
                 </StyledTd>
                 <StyledTd align="center">
-                  {variant === 'trend' ? (
-                    <Stack direction="column" spacing={0.75} alignItems="center">
-                      <StatusChip status="success" label={`성공 ${(row.successCount ?? 0).toLocaleString()}건`} />
-                      <StatusChip status="error" label={`실패 ${((row.errorCount ?? 0) + (row.optoutCount ?? 0)).toLocaleString()}건`} />
-                    </Stack>
-                  ) : (
-                    <StatusChip 
-                      label={statusLabelMap[row.status]} 
-                      status={row.status} 
-                    />
-                  )}
+                  <StatusChip label={statusLabelMap[row.status]} status={row.status} />
                 </StyledTd>
               </StyledRow>
             ))
