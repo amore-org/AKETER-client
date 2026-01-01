@@ -14,6 +14,7 @@ import { normalizeSendRows, normalizePersonaProfiles } from './api/normalize';
 import type { PersonaProfile } from './api/types';
 import { PersonaDrawer } from './common/ui/PersonaDrawer';
 import { PersonaCloud, type PersonaCloudItem } from './common/ui/PersonaCloud';
+import { PersonaRankTable } from './common/ui/PersonaRankTable';
 import { ScheduleChangeDialog } from './common/ui/ScheduleChangeDialog';
 import { getReservationDetail, getTodayReservations, mapReservationDtoToTableRow } from './api/reservations';
 
@@ -262,6 +263,10 @@ const readTabFromHash = (): TabKey => {
 };
 
 function App() {
+  // TODO(임시): 워드클라우드 비율/크기 UI 확인용 mock 모드.
+  // 실제 데이터로 전환할 때 false로 바꾸면 된다.
+  const USE_PERSONA_CLOUD_MOCK = true;
+
   const [tabValue, setTabValue] = useState(() => tabKeyToIndex(readTabFromHash()));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<TableRowData | null>(null);
@@ -311,18 +316,91 @@ function App() {
     });
   }, [normalizedTrendRows, personaBase]);
 
+  const personaProfilesForCloud = useMemo(() => {
+    if (!USE_PERSONA_CLOUD_MOCK) return personaProfiles;
+
+    // mock 모드에서는 UI 확인을 위해 페르소나를 20개로 확장한다.
+    const target = 20;
+    if (personaProfiles.length >= target) return personaProfiles.slice(0, target);
+
+    const extraCount = target - personaProfiles.length;
+    const extras = Array.from({ length: extraCount }, (_, i) => {
+      const idx = personaProfiles.length + i;
+      const template = personaProfiles[idx % personaProfiles.length];
+      return {
+        ...template,
+        personaId: `mock-p-${String(idx + 1).padStart(3, '0')}`,
+        persona: `${template.persona} #${idx + 1}`,
+        recentSends: [],
+      };
+    });
+
+    return [...personaProfiles, ...extras];
+  }, [USE_PERSONA_CLOUD_MOCK, personaProfiles]);
+
   const personaCloudItems: PersonaCloudItem[] = useMemo(() => {
     const counts = new Map<string, number>();
+    let totalCount = 0;
     normalizedTrendRows.forEach((r) => {
       const key = r.personaId ?? r.persona;
       counts.set(key, (counts.get(key) ?? 0) + 1);
+      totalCount += 1;
     });
+
+    let maxCount = 0;
+    counts.forEach((v) => {
+      if (v > maxCount) maxCount = v;
+    });
+
     return personaProfiles.map((p) => {
-      const c = counts.get(p.personaId) ?? 1;
-      const weight = Math.max(1, Math.min(5, c));
-      return { personaId: p.personaId, label: p.persona, weight };
+      const personaId = p.personaId || p.persona;
+      const c = counts.get(personaId) ?? 0;
+      // 기존 칩 클라우드가 "최소 1"로 보여주던 UX를 유지하면서도,
+      // 실제 count/ratio는 0을 그대로 전달한다.
+      const displayCount = c || 1;
+      const weight = Math.max(1, Math.min(5, displayCount));
+      const ratio = totalCount ? c / totalCount : 0;
+      const isTop = maxCount > 0 && c === maxCount;
+      return { personaId, label: p.persona, weight, count: c, ratio, isTop, value: displayCount };
     });
   }, [normalizedTrendRows, personaProfiles]);
+
+  const mockPersonaCloudItems: PersonaCloudItem[] = useMemo(() => {
+    // personaProfilesForCloud 순서대로 count를 강제로 지정(비중 UI 확인용)
+    // 20개 페르소나에 대해 head + mid + long-tail 형태로 분포를 만든다.
+    const mockCountsByIndex = [160, 120, 95, 78, 64, 52, 44, 38, 33, 29, 25, 22, 19, 16, 13, 11, 9, 7, 5, 3];
+    const total = mockCountsByIndex.reduce((a, b) => a + b, 0);
+    const max = Math.max(...mockCountsByIndex);
+
+    return personaProfilesForCloud.map((p, idx) => {
+      const personaId = p.personaId || p.persona;
+      const c = mockCountsByIndex[idx] ?? 1;
+      const ratio = total ? c / total : 0;
+      const isTop = c === max;
+      const displayCount = c || 1;
+      const weight = Math.max(1, Math.min(5, displayCount));
+      return { personaId, label: p.persona, weight, count: c, ratio, isTop, value: displayCount };
+    });
+  }, [personaProfilesForCloud]);
+
+  const personaCloudItemsToShow = USE_PERSONA_CLOUD_MOCK ? mockPersonaCloudItems : personaCloudItems;
+
+  const personaRankRows = useMemo(() => {
+    const statsById = new Map<string, { count: number; ratio: number }>();
+    personaCloudItemsToShow.forEach((it) => {
+      statsById.set(it.personaId, { count: it.count ?? 0, ratio: it.ratio ?? 0 });
+    });
+
+    const profiles = USE_PERSONA_CLOUD_MOCK ? personaProfilesForCloud : personaProfiles;
+    const sorted = profiles
+      .slice()
+      .sort((a, b) => (statsById.get(b.personaId)?.count ?? 0) - (statsById.get(a.personaId)?.count ?? 0));
+
+    return sorted.map((p, idx) => {
+      const stat = statsById.get(p.personaId) ?? { count: 0, ratio: 0 };
+      return { rank: idx + 1, profile: p, count: stat.count, ratio: stat.ratio };
+    });
+  }, [USE_PERSONA_CLOUD_MOCK, personaCloudItemsToShow, personaProfiles, personaProfilesForCloud]);
 
   const handleRowClick = (row: TableRowData) => {
     setSelectedRow(row);
@@ -343,7 +421,7 @@ function App() {
   };
 
   const handlePersonaSelect = (personaId: string) => {
-    const found = personaProfiles.find((p) => p.personaId === personaId) ?? null;
+    const found = (USE_PERSONA_CLOUD_MOCK ? personaProfilesForCloud : personaProfiles).find((p) => p.personaId === personaId) ?? null;
     setSelectedPersona(found);
     setPersonaDrawerOpen(true);
   };
@@ -449,7 +527,8 @@ function App() {
                   페르소나를 선택하면 상세 정보를 확인할 수 있어요!
                 </Typography>
               </Box>
-              <PersonaCloud items={personaCloudItems} onSelect={handlePersonaSelect} />
+              <PersonaCloud items={personaCloudItemsToShow} onSelect={handlePersonaSelect} />
+              <PersonaRankTable rows={personaRankRows} onSelectPersona={handlePersonaSelect} />
             </>
           )}
 
