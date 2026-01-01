@@ -6,15 +6,18 @@ import {
   TableRow,
   Box,
   Stack,
+  Chip,
+  Checkbox,
+  ListItemText,
   TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Autocomplete,
   Button,
   Typography,
   IconButton,
-  Popover,
   Divider,
   Tooltip,
 } from '@mui/material';
@@ -29,13 +32,12 @@ import dayjs from 'dayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import SearchIcon from '@mui/icons-material/Search';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import EventIcon from '@mui/icons-material/Event';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import type { TableRowData } from '../../api/types';
 import { Button as AppButton } from './Button';
+import { Popover } from './Popover';
 
 /**
  * 테이블 데이터 구조 정의 (TypeScript)
@@ -54,7 +56,7 @@ interface DataTableProps {
   variant?: DataTableVariant;
 }
 
-type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'content';
+type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'channel';
 
 const StyledTableContainer = styled(TableContainer)`
   && {
@@ -108,9 +110,9 @@ export const DataTable = ({
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
   const [timeFilter, setTimeFilter] = useState<string>(''); // HH:mm
   const [statusFilter, setStatusFilter] = useState<'all' | ChipStatus>('all');
-  const [personaQuery, setPersonaQuery] = useState('');
+  const [personaSelected, setPersonaSelected] = useState<string[]>([]);
   const [productQuery, setProductQuery] = useState('');
-  const [contentQuery, setContentQuery] = useState('');
+  const [channelFilter, setChannelFilter] = useState<'all' | string>('all');
   const [page, setPage] = useState(1);
 
   const [popover, setPopover] = useState<{
@@ -127,9 +129,7 @@ export const DataTable = ({
   const filteredRows = useMemo(() => {
     const dateStr = variant === 'trend' && selectedDate ? selectedDate.format('YYYY-MM-DD') : null;
     const timeStr = variant === 'today' ? timeFilter.trim() : '';
-    const personaQ = personaQuery.trim().toLowerCase();
     const productQ = productQuery.trim().toLowerCase();
-    const contentQ = contentQuery.trim().toLowerCase();
 
     const isTrendFailure = (row: TableRowData) => {
       const failCount = (row.errorCount ?? 0) + (row.optoutCount ?? 0);
@@ -148,15 +148,12 @@ export const DataTable = ({
           if (row.status !== statusFilter) return false;
         }
       }
-      if (personaQ && !row.persona.toLowerCase().includes(personaQ)) return false;
+      if (personaSelected.length > 0 && !personaSelected.includes(row.persona)) return false;
+      if (channelFilter !== 'all' && row.channel !== channelFilter) return false;
       if (productQ && !row.product.toLowerCase().includes(productQ)) return false;
-      if (contentQ) {
-        const haystack = `${row.title} ${row.description}`.toLowerCase();
-        if (!haystack.includes(contentQ)) return false;
-      }
       return true;
     });
-  }, [contentQuery, personaQuery, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
+  }, [channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
 
@@ -169,16 +166,6 @@ export const DataTable = ({
 
   const handleStatusChange = (e: SelectChangeEvent) => {
     setStatusFilter(e.target.value as 'all' | ChipStatus);
-    setPage(1);
-  };
-
-  const resetFilters = () => {
-    setSelectedDate(null);
-    setTimeFilter('');
-    setStatusFilter('all');
-    setPersonaQuery('');
-    setProductQuery('');
-    setContentQuery('');
     setPage(1);
   };
 
@@ -198,6 +185,32 @@ export const DataTable = ({
     if (channel === '카카오톡 알림톡') return '알림톡';
     return channel;
   };
+
+  const personaOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => set.add(r.persona));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [rows]);
+
+  const channelOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    rows.forEach((r) => {
+      if (!r.channel) return;
+      // label은 사용자에게 보여주는 값, value는 실제 row.channel 값
+      map.set(formatChannel(r.channel), r.channel);
+    });
+    return Array.from(map.entries())
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+  }, [rows]);
+
+  const channelBadgeSx = {
+    borderRadius: amoreTokens.radius.base,
+    borderColor: amoreTokens.colors.gray[300],
+    color: amoreTokens.colors.gray[500],
+    bgcolor: amoreTokens.colors.common.white,
+    fontWeight: amoreTokens.typography.weight.semibold,
+  } as const;
 
   const truncateText = (text: string, maxLen: number) => {
     const t = (text ?? '').trim();
@@ -226,9 +239,9 @@ export const DataTable = ({
         onClose={closePopover}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { borderRadius: amoreTokens.radius.base } } }}
+        paperSx={{ borderRadius: amoreTokens.radius.base }}
       >
-        <Box sx={{ p: 2, width: { xs: '18rem', sm: '22rem' } }}>
+        <Box sx={{ p: 2, width: '100%' }}>
           {popover.key === 'date' && variant === 'trend' && (
             <Stack spacing={1.5}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
@@ -254,6 +267,7 @@ export const DataTable = ({
               <Divider />
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button
+                  size="small"
                   variant="outlined"
                   onClick={() => {
                     setSelectedDate(null);
@@ -263,7 +277,7 @@ export const DataTable = ({
                 >
                   초기화
                 </Button>
-                <Button variant="contained" onClick={closePopover}>
+                <Button size="small" variant="contained" onClick={closePopover}>
                   닫기
                 </Button>
               </Stack>
@@ -290,6 +304,7 @@ export const DataTable = ({
               <Divider />
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button
+                  size="small"
                   variant="outlined"
                   onClick={() => {
                     setTimeFilter('');
@@ -299,7 +314,7 @@ export const DataTable = ({
                 >
                   초기화
                 </Button>
-                <Button variant="contained" onClick={closePopover}>
+                <Button size="small" variant="contained" onClick={closePopover}>
                   닫기
                 </Button>
               </Stack>
@@ -318,6 +333,7 @@ export const DataTable = ({
                   value={statusFilter}
                   label="상태"
                   onChange={handleStatusChange}
+                  MenuProps={{ disablePortal: true }}
                 >
                   <MenuItem value="all">전체</MenuItem>
                   {variant === 'trend' ? (
@@ -337,6 +353,7 @@ export const DataTable = ({
               <Divider />
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button
+                  size="small"
                   variant="outlined"
                   onClick={() => {
                     setStatusFilter('all');
@@ -346,7 +363,7 @@ export const DataTable = ({
                 >
                   초기화
                 </Button>
-                <Button variant="contained" onClick={closePopover}>
+                <Button size="small" variant="contained" onClick={closePopover}>
                   닫기
                 </Button>
               </Stack>
@@ -356,32 +373,85 @@ export const DataTable = ({
           {popover.key === 'persona' && (
             <Stack spacing={1.5}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                페르소나 검색
+                페르소나 필터
               </Typography>
-              <TextField
-                size="small"
-                label="페르소나"
-                placeholder="예: 20대 여성"
-                value={personaQuery}
-                onChange={(e) => {
-                  setPersonaQuery(e.target.value);
+              <Autocomplete
+                multiple
+                disableCloseOnSelect
+                options={personaOptions}
+                value={personaSelected}
+                onChange={(_e, next) => {
+                  setPersonaSelected(next);
                   setPage(1);
                 }}
-                fullWidth
+                size="small"
+                renderInput={(params) => <TextField {...params} label="페르소나" placeholder="검색 후 선택" />}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}>
+                    <Checkbox size="small" sx={{ mr: 1 }} checked={selected} />
+                    <ListItemText primary={option} />
+                  </li>
+                )}
               />
               <Divider />
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button
+                  size="small"
                   variant="outlined"
                   onClick={() => {
-                    setPersonaQuery('');
+                    setPersonaSelected([]);
                     setPage(1);
                   }}
-                  disabled={!personaQuery}
+                  disabled={personaSelected.length === 0}
                 >
                   초기화
                 </Button>
-                <Button variant="contained" onClick={closePopover}>
+                <Button size="small" variant="contained" onClick={closePopover}>
+                  닫기
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
+          {popover.key === 'channel' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                채널 필터
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="channel-filter-label">채널</InputLabel>
+                <Select
+                  labelId="channel-filter-label"
+                  value={channelFilter}
+                  label="채널"
+                  onChange={(e) => {
+                    setChannelFilter(e.target.value as 'all' | string);
+                    setPage(1);
+                  }}
+                  MenuProps={{ disablePortal: true }}
+                >
+                  <MenuItem value="all">전체</MenuItem>
+                  {channelOptions.map((c) => (
+                    <MenuItem key={c.value} value={c.value}>
+                      {c.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setChannelFilter('all');
+                    setPage(1);
+                  }}
+                  disabled={channelFilter === 'all'}
+                >
+                  초기화
+                </Button>
+                <Button size="small" variant="contained" onClick={closePopover}>
                   닫기
                 </Button>
               </Stack>
@@ -407,6 +477,7 @@ export const DataTable = ({
               <Divider />
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button
+                  size="small"
                   variant="outlined"
                   onClick={() => {
                     setProductQuery('');
@@ -416,47 +487,13 @@ export const DataTable = ({
                 >
                   초기화
                 </Button>
-                <Button variant="contained" onClick={closePopover}>
+                <Button size="small" variant="contained" onClick={closePopover}>
                   닫기
                 </Button>
               </Stack>
             </Stack>
           )}
 
-          {popover.key === 'content' && (
-            <Stack spacing={1.5}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                메시지 검색
-              </Typography>
-              <TextField
-                size="small"
-                label="타이틀/본문"
-                placeholder="예: 할인"
-                value={contentQuery}
-                onChange={(e) => {
-                  setContentQuery(e.target.value);
-                  setPage(1);
-                }}
-                fullWidth
-              />
-              <Divider />
-              <Stack direction="row" spacing={1} justifyContent="flex-end">
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    setContentQuery('');
-                    setPage(1);
-                  }}
-                  disabled={!contentQuery}
-                >
-                  초기화
-                </Button>
-                <Button variant="contained" onClick={closePopover}>
-                  닫기
-                </Button>
-              </Stack>
-            </Stack>
-          )}
         </Box>
       </Popover>
 
@@ -467,16 +504,16 @@ export const DataTable = ({
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">페르소나</Box>
-                <Tooltip title="페르소나 검색">
+                <Tooltip title="페르소나 필터">
                   <IconButton
                     size="small"
                     onClick={openPopover('persona')}
                     sx={{
                       ...headerIconButtonSx,
-                      color: personaQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                      color: personaSelected.length > 0 ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
                     }}
                   >
-                    <SearchIcon fontSize="inherit" />
+                    <FilterAltIcon fontSize="inherit" />
                   </IconButton>
                 </Tooltip>
               </Stack>
@@ -484,38 +521,40 @@ export const DataTable = ({
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">상품명</Box>
-                <Tooltip title="상품명 검색">
+                <Tooltip title="상품명 필터">
                   <IconButton
                     size="small"
                     onClick={openPopover('product')}
                     sx={{
                       ...headerIconButtonSx,
-                      color: productQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                      color: productQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
                     }}
                   >
-                    <SearchIcon fontSize="inherit" />
+                    <FilterAltIcon fontSize="inherit" />
                   </IconButton>
                 </Tooltip>
               </Stack>
             </StyledTh>
             <StyledTh>
-              <Box component="span">채널</Box>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">채널</Box>
+                <Tooltip title="채널 필터">
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('channel')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: channelFilter !== 'all' ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
+                    }}
+                  >
+                    <FilterAltIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
             </StyledTh>
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">메시지</Box>
-                <Tooltip title="타이틀/본문 검색">
-                  <IconButton
-                    size="small"
-                    onClick={openPopover('content')}
-                    sx={{
-                      ...headerIconButtonSx,
-                      color: contentQuery ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
-                    }}
-                  >
-                    <SearchIcon fontSize="inherit" />
-                  </IconButton>
-                </Tooltip>
               </Stack>
             </StyledTh>
             <StyledTh>
@@ -528,7 +567,7 @@ export const DataTable = ({
                       onClick={openPopover('date')}
                       sx={{
                         ...headerIconButtonSx,
-                        color: selectedDate ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                        color: selectedDate ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
                       }}
                     >
                       <EventIcon fontSize="inherit" />
@@ -541,7 +580,7 @@ export const DataTable = ({
                       onClick={openPopover('time')}
                       sx={{
                         ...headerIconButtonSx,
-                        color: timeFilter ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                        color: timeFilter ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
                       }}
                     >
                       <EventIcon fontSize="inherit" />
@@ -559,19 +598,10 @@ export const DataTable = ({
                     onClick={openPopover('status')}
                     sx={{
                       ...headerIconButtonSx,
-                      color: statusFilter !== 'all' ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[600],
+                      color: statusFilter !== 'all' ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
                     }}
                   >
                     <FilterAltIcon fontSize="inherit" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="필터 초기화">
-                  <IconButton
-                    size="small"
-                    onClick={resetFilters}
-                    sx={{ ...headerIconButtonSx, color: amoreTokens.colors.gray[600] }}
-                  >
-                    <RestartAltIcon fontSize="inherit" />
                   </IconButton>
                 </Tooltip>
               </Stack>
@@ -589,39 +619,58 @@ export const DataTable = ({
               >
                 <StyledTd sx={{ minWidth: '12rem', fontWeight: 600 }}>
                   {onPersonaClick ? (
-                    <AppButton
-                      variant="link"
-                      linkKind="internal"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPersonaClick(row);
-                      }}
-                      aria-label="페르소나 상세 보기"
-                    >
-                      {row.persona}
-                    </AppButton>
+                    <Tooltip title="클릭하면 페르소나 상세 Drawer가 열립니다.">
+                      <span>
+                        <AppButton
+                          variant="link"
+                          linkKind="internal"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPersonaClick(row);
+                          }}
+                          aria-label="페르소나 상세 보기"
+                        >
+                          {row.persona}
+                        </AppButton>
+                      </span>
+                    </Tooltip>
                   ) : (
                     row.persona
                   )}
                 </StyledTd>
                 <StyledTd sx={{ minWidth: '10rem' }}>
                   {onProductClick ? (
-                    <AppButton
-                      variant="link"
-                      linkKind="external"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onProductClick(row);
-                      }}
-                      aria-label="상품 상세 보기"
-                    >
-                      {row.product}
-                    </AppButton>
+                    <Tooltip title="클릭하면 상품 상세 페이지로 이동합니다.">
+                      <span>
+                        <AppButton
+                          variant="link"
+                          linkKind="external"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onProductClick(row);
+                          }}
+                          aria-label="상품 상세 보기"
+                        >
+                          {row.product}
+                        </AppButton>
+                      </span>
+                    </Tooltip>
                   ) : (
                     row.product
                   )}
                 </StyledTd>
-                <StyledTd sx={{ whiteSpace: 'nowrap' }}>{formatChannel(row.channel)}</StyledTd>
+                <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                  {row.channel ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={formatChannel(row.channel)}
+                      sx={channelBadgeSx}
+                    />
+                  ) : (
+                    '-'
+                  )}
+                </StyledTd>
                 <StyledTd sx={{ maxWidth: '26rem' }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
                     <Typography
@@ -654,7 +703,7 @@ export const DataTable = ({
                             e.stopPropagation();
                             onChangeScheduleClick?.(row);
                           }}
-                          sx={{ ...headerIconButtonSx, color: amoreTokens.colors.gray[600] }}
+                          sx={{ ...headerIconButtonSx, color: amoreTokens.colors.gray[500] }}
                         >
                           <EditOutlinedIcon fontSize="inherit" />
                         </IconButton>
