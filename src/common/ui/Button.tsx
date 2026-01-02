@@ -62,9 +62,9 @@ const variantCss = (variant: AppButtonVariant) => {
   const primaryBg = amoreTokens.colors.brand.pacificBlue;
   const primaryFg = amoreTokens.colors.common.white;
 
-  const secondaryBg = amoreTokens.colors.navy[50];
-  const secondaryFg = amoreTokens.colors.navy[700] ?? amoreTokens.colors.gray[900];
-  const secondaryBorder = amoreTokens.colors.navy[100];
+  const secondaryBg = amoreTokens.colors.gray[100];
+  const secondaryFg = amoreTokens.colors.gray[700];
+  const secondaryBorder = amoreTokens.colors.gray[200];
 
   const dangerBg = amoreTokens.colors.status.red;
   const dangerFg = amoreTokens.colors.common.white;
@@ -108,9 +108,9 @@ const variantCss = (variant: AppButtonVariant) => {
       return css`
         background: ${secondaryBg};
         color: ${secondaryFg};
-        border: 1px solid ${secondaryBorder};
+        border: 1px solid ${amoreTokens.colors.gray[200]};
         &:hover {
-          background: ${amoreTokens.colors.gray[100]};
+          background: ${amoreTokens.colors.gray[200]};
         }
       `;
     case 'secondary-outlined':

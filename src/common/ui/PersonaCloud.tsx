@@ -40,8 +40,10 @@ type CloudDatum = {
 
 const CloudWrap = styled(Box)`
   border: 1px solid ${amoreTokens.colors.navy[100]};
+  border-radius: ${amoreTokens.radius.base};
+  overflow: hidden;
   background: ${amoreTokens.colors.common.white};
-  padding: ${amoreTokens.spacing(3)};
+  padding: 0;
 `;
 
 const seededRandom = (seed: number) => {
@@ -209,6 +211,11 @@ const resolveCircleCollisions = (nodes: PositionedBubble[], bounds: { halfW: num
 
 export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
   const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
+  const metaByLabel = useMemo(() => {
+    const map = new Map<string, PersonaCloudItem>();
+    for (const it of items) map.set(it.label, it);
+    return map;
+  }, [items]);
 
   const summary = useMemo(() => {
     if (!items.length) return null;
@@ -246,7 +253,7 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
     return (
       <CloudWrap>
         <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-          표시할 페르소나가 없습니다.
+          표시할 페르소나가 없어요.
         </Typography>
       </CloudWrap>
     );
@@ -257,7 +264,17 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
   return (
     <CloudWrap>
       {summary && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 2, mb: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            gap: 2,
+            backgroundColor: amoreTokens.colors.navy[50],
+            padding: '1rem',
+            borderBottom: `2px solid ${amoreTokens.colors.navy[100]}`,
+          }}
+        >
           <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[800], fontWeight: amoreTokens.typography.weight.bold }}>
             최다 비중: {summary.topLabel} ({summary.topCount}건, {summary.topPct}%)
           </Typography>
@@ -267,7 +284,7 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
         </Box>
       )}
 
-      <Box sx={{ width: '100%', height: 720 }}>
+      <Box sx={{ width: '100%', height: 720, padding: amoreTokens.spacing(3) }}>
         <ParentSize debounceTime={120}>
           {({ width, height }) => {
             const w = Math.max(10, Math.floor(width));
@@ -362,6 +379,8 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
                         rotate: number;
                         size: number;
                       };
+                      const meta = metaByLabel.get(wAny.text);
+                      const personaId = meta?.personaId ?? wAny.personaId ?? wAny.text;
 
                       const t = clamp((wAny.size - minFont) / (maxFont - minFont), 0, 1);
                       // 투명도(알파) 대신, 메인 컬러를 기준으로 "명도 단계"를 넓게 가져간다.
@@ -392,7 +411,7 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
                       const fitted = fitTextInCircle(wAny.text, bubbleRadius);
 
                       return {
-                        personaId: wAny.personaId,
+                        personaId,
                         text: wAny.text,
                         lines: fitted.lines,
                         x: wAny.x,
@@ -405,9 +424,9 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
                         bubbleRadius,
                         collisionRadius,
                         fittedFontSize: fitted.fontSize,
-                        isTop: wAny.isTop,
-                        count: wAny.count,
-                        ratio: wAny.ratio,
+                        isTop: meta?.isTop ?? wAny.isTop,
+                        count: meta?.count ?? wAny.count,
+                        ratio: meta?.ratio ?? wAny.ratio,
                       };
                     });
 
@@ -438,7 +457,22 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
                           onMouseLeave={() => setHoveredPersonaId(null)}
                           onFocus={() => setHoveredPersonaId(n.personaId)}
                           onBlur={() => setHoveredPersonaId(null)}
-                          onClick={isClickable ? () => onSelect?.(n.personaId) : undefined}
+                          // SVG 클릭이 브라우저/디바이스에 따라 씹히는 케이스가 있어 pointer 이벤트로 보강한다.
+                          onPointerDown={(e) => {
+                            if (!isClickable) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSelect?.(n.personaId);
+                          }}
+                          onClick={
+                            isClickable
+                              ? (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  onSelect?.(n.personaId);
+                                }
+                              : undefined
+                          }
                           role={isClickable ? 'button' : undefined}
                           tabIndex={isClickable ? 0 : -1}
                           onKeyDown={(e) => {

@@ -127,17 +127,13 @@ const mapChannelLabel = (channelType: ChannelTypeDto): string => {
 const mapStatusToChipStatus = (status: ReservationStatusDto): ChipStatus => {
   switch (status) {
     case 'READY':
-      return 'info'; // 발송 대기
-    case 'PENDING':
-      return 'paused'; // 진행/대기(임시로 일시정지 UI 컬러 사용)
+      return 'info'; // 발송 예정
     case 'COMPLETED':
       return 'success'; // 발송 완료
-    case 'FAILED':
-      return 'warning'; // 실패(확인 필요)
     case 'CANCELED':
       return 'error'; // 발송 취소
     default:
-      return 'default';
+      return 'info';
   }
 };
 
@@ -248,6 +244,24 @@ export async function getTodayReservations(params: GetTodayReservationsParams = 
 export async function getReservationDetail(reservationId: number): Promise<ReservationDetailDto> {
   const res = await requestJson<ReservationDetailServer>(`/api/reservations/${reservationId}`);
   return mapDetailServerToDto(res);
+}
+
+/**
+ * 5) 변경 API(시간 변경/취소)
+ * NOTE: 백엔드 엔드포인트가 확정되면 아래 path/body만 조정하면 됩니다.
+ */
+export async function updateReservationSchedule(reservationId: number, scheduledAt: string): Promise<void> {
+  await requestJson<unknown>(`/api/reservations/${reservationId}/schedule`, {
+    method: 'PATCH',
+    body: { scheduledAt },
+  });
+}
+
+export async function cancelReservation(reservationId: number, reason?: string): Promise<void> {
+  await requestJson<unknown>(`/api/reservations/${reservationId}/cancel`, {
+    method: 'POST',
+    body: { reason },
+  });
 }
 
 

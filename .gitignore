@@ -46,6 +46,9 @@ $RECYCLE.BIN/
 *.sw?
 *.stackdump
 
+# Local-only docs
+docs/
+
 # Editor directories and files
 *.suo
 *.ntvs*

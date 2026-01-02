@@ -1,12 +1,14 @@
 // src/common/ui/PersonaRankTable.tsx
 import type { ChangeEvent } from 'react';
 import { useMemo, useState } from 'react';
-import { Box, Chip, Table, TableBody, TableHead, TableRow, Typography } from '@mui/material';
+import { Box, Table, TableBody, TableHead, TableRow, Typography } from '@mui/material';
 import styled from 'styled-components';
 import type { PersonaProfile } from '../../api/types';
 import { amoreTokens } from '../../styles/theme';
 import { StyledRow, StyledTableContainer, StyledTd, StyledTh } from './DataTable';
 import { Pagination } from './Pagination';
+import { AppChip } from './Chip';
+import { formatKoreanLevelLabel, personaLevelChipSx } from './personaLevel';
 
 type PersonaRankRow = {
   rank: number;
@@ -34,12 +36,13 @@ const Keywords = ({ values }: { values?: string[] }) => {
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
       {v.slice(0, 6).map((k, idx) => (
-        <Chip
+        <AppChip
           key={`${k}-${idx}`}
           label={k}
           size="small"
-          variant="outlined"
-          sx={{ borderRadius: amoreTokens.radius.base, fontWeight: amoreTokens.typography.weight.medium }}
+          variant="filled"
+          tone="neutral"
+          sx={{ fontWeight: amoreTokens.typography.weight.medium }}
         />
       ))}
       {v.length > 6 && (
@@ -104,9 +107,33 @@ export const PersonaRankTable = ({ rows, onSelectPersona }: PersonaRankTableProp
                   <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.ageGroup ?? '-'}</StyledTd>
                   <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.mainCategory ?? '-'}</StyledTd>
                   <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.purchaseMethod ?? '-'}</StyledTd>
-                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.brandLoyalty ?? '-'}</StyledTd>
-                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.priceSensitivity ?? '-'}</StyledTd>
-                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>{r.profile.benefitSensitivity ?? '-'}</StyledTd>
+                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                    <AppChip
+                      label={formatKoreanLevelLabel(r.profile.brandLoyalty)}
+                      size="small"
+                      variant="filled"
+                      tone="neutral"
+                      sx={{ ...personaLevelChipSx(r.profile.brandLoyalty) }}
+                    />
+                  </StyledTd>
+                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                    <AppChip
+                      label={formatKoreanLevelLabel(r.profile.priceSensitivity)}
+                      size="small"
+                      variant="filled"
+                      tone="neutral"
+                      sx={{ ...personaLevelChipSx(r.profile.priceSensitivity) }}
+                    />
+                  </StyledTd>
+                  <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                    <AppChip
+                      label={formatKoreanLevelLabel(r.profile.benefitSensitivity)}
+                      size="small"
+                      variant="filled"
+                      tone="neutral"
+                      sx={{ ...personaLevelChipSx(r.profile.benefitSensitivity) }}
+                    />
+                  </StyledTd>
                   <StyledTd>
                     <Keywords values={r.profile.trendKeywords} />
                   </StyledTd>
