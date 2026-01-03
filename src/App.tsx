@@ -8,17 +8,14 @@ import { amoreTokens } from './styles/theme';
 import { DataTable } from './common/ui/DataTable';
 import type { TableRowData } from './common/ui/DataTable';
 import { DetailDrawer } from './common/ui/DetailDrawer';
-import dayjs from 'dayjs';
-import { defaultFieldMapping } from './api/fieldMapping';
-import { normalizeSendRows, normalizePersonaProfiles } from './api/normalize';
 import type { PersonaProfile } from './api/types';
 import { PersonaDrawer } from './common/ui/PersonaDrawer';
 import { PersonaCloud, type PersonaCloudItem } from './common/ui/PersonaCloud';
 import { PersonaRankTable } from './common/ui/PersonaRankTable';
-import { ScheduleChangeModal } from './common/ui/ConfirmModal';
-import { buildTrendRowsRaw, personaBaseRaw } from './features/reservations/mockData';
 import { AppToast, type ToastState } from './common/ui/Toast';
-import { getReservationDetail, mapReservationDtoToTableRow, updateReservationSchedule } from './api/reservations';
+import { getReservations, getReservationsToday, mapReservationDtoToTableRow } from './api/reservations';
+import { getPersonaTypes } from './api/personaTypes';
+import { HttpError } from './api/http';
 
 const NAVBAR_HEIGHT = amoreTokens.spacing(8);
 const TABS_HEIGHT = amoreTokens.spacing(6);
@@ -72,10 +69,6 @@ const readTabFromHash = (): TabKey => {
 };
 
 function App() {
-  // TODO(임시): 워드클라우드 비율/크기 UI 확인용 mock 모드.
-  // 실제 데이터로 전환할 때 false로 바꾸면 된다.
-  const USE_PERSONA_CLOUD_MOCK = true;
-
   const [tabValue, setTabValue] = useState(() => tabKeyToIndex(readTabFromHash()));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<TableRowData | null>(null);
@@ -83,10 +76,6 @@ function App() {
 
   const [personaDrawerOpen, setPersonaDrawerOpen] = useState(false);
   const [selectedPersona, setSelectedPersona] = useState<PersonaProfile | null>(null);
-
-  const [tableScheduleOpen, setTableScheduleOpen] = useState(false);
-  const [tableScheduleRow, setTableScheduleRow] = useState<TableRowData | null>(null);
-  const [tableScheduleTime, setTableScheduleTime] = useState<string>('');
 
   const [toast, setToast] = useState<ToastState>({
     open: false,
@@ -101,130 +90,102 @@ function App() {
 
   const tabKey = useMemo(() => tabIndexToKey(tabValue), [tabValue]);
 
-  const todayStr = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
+  const [trendRows, setTrendRows] = useState<TableRowData[]>([]);
+  const [reservationsScheduledAt, setReservationsScheduledAt] = useState<string | null>(null);
+  const [reservationsPage, setReservationsPage] = useState<number>(1); // 1-based(UI)
+  const [reservationsPageCount, setReservationsPageCount] = useState<number>(1);
 
-  const normalizedTrendRows = useMemo(
-    () => normalizeSendRows(buildTrendRowsRaw(todayStr), defaultFieldMapping),
-    [todayStr],
-  );
-  const [trendRows, setTrendRows] = useState<TableRowData[]>(() => normalizedTrendRows);
+  const [personaProfiles, setPersonaProfiles] = useState<PersonaProfile[]>([]);
 
-  const personaBase = useMemo(() => normalizePersonaProfiles(personaBaseRaw, defaultFieldMapping), []);
+  useEffect(() => {
+    // 예약 목록 조회 (docs/API.md: /api/reservations)
+    void (async () => {
+      try {
+        const res = await getReservations({
+          scheduledAt: reservationsScheduledAt,
+          page: Math.max(0, reservationsPage - 1),
+          size: 10,
+        }).catch(async (e) => {
+          // 백엔드가 today 전용 엔드포인트만 제공하는 환경을 위한 fallback
+          if (e instanceof HttpError && e.status === 404) {
+            return await getReservationsToday({
+              date: reservationsScheduledAt,
+              page: Math.max(0, reservationsPage - 1),
+              size: 10,
+              sort: 'scheduledAt,asc',
+            });
+          }
+          throw e;
+        });
+        setTrendRows(res.items.map(mapReservationDtoToTableRow));
+        setReservationsPageCount(Math.max(1, res.totalPages || 1));
+      } catch (e) {
+        console.error(e);
+        showToast({ severity: 'error', message: '예약 목록을 불러오지 못했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+      }
+    })();
+  }, [reservationsPage, reservationsScheduledAt]);
 
-  const personaProfiles = useMemo(() => {
-    const byPersonaId = new Map<string, TableRowData[]>();
-    trendRows.forEach((r) => {
-      const key = r.personaId ?? r.persona;
-      const arr = byPersonaId.get(key) ?? [];
-      arr.push(r);
-      byPersonaId.set(key, arr);
-    });
-
-    const sortDesc = (a: TableRowData, b: TableRowData) => {
-      const at = dayjs(`${a.date} ${a.time}`, 'YYYY-MM-DD HH:mm');
-      const bt = dayjs(`${b.date} ${b.time}`, 'YYYY-MM-DD HH:mm');
-      return bt.valueOf() - at.valueOf();
-    };
-
-    return personaBase.map((p) => {
-      const key = p.personaId || p.persona;
-      const recent = (byPersonaId.get(key) ?? []).slice().sort(sortDesc).slice(0, 5);
-      return {
-        ...p,
-        recentSends: recent.map((r) => ({ id: r.id, date: r.date, time: r.time, product: r.product, title: r.title, status: r.status })),
-      };
-    });
-  }, [personaBase, trendRows]);
-
-  const personaProfilesForCloud = useMemo(() => {
-    if (!USE_PERSONA_CLOUD_MOCK) return personaProfiles;
-
-    // mock 모드에서는 UI 확인을 위해 페르소나를 20개로 확장한다.
-    const target = 20;
-    if (personaProfiles.length >= target) return personaProfiles.slice(0, target);
-
-    const extraCount = target - personaProfiles.length;
-    const extras = Array.from({ length: extraCount }, (_, i) => {
-      const idx = personaProfiles.length + i;
-      const template = personaProfiles[idx % personaProfiles.length];
-      return {
-        ...template,
-        personaId: `mock-p-${String(idx + 1).padStart(3, '0')}`,
-        persona: `${template.persona} #${idx + 1}`,
-        recentSends: [],
-      };
-    });
-
-    return [...personaProfiles, ...extras];
-  }, [USE_PERSONA_CLOUD_MOCK, personaProfiles]);
+  useEffect(() => {
+    // 페르소나 유형 조회 (docs/API.md: /api/persona-types)
+    void (async () => {
+      try {
+        const first = await getPersonaTypes({ page: 0, size: 200 });
+        let all = first.items.slice();
+        const totalPages = Math.max(1, first.totalPages || 1);
+        if (totalPages > 1) {
+          const rest = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) => getPersonaTypes({ page: i + 1, size: 200 })),
+          );
+          rest.forEach((p) => {
+            all = all.concat(p.items);
+          });
+        }
+        setPersonaProfiles(all);
+      } catch (e) {
+        console.error(e);
+        showToast({ severity: 'error', message: '페르소나 목록을 불러오지 못했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+      }
+    })();
+  }, []);
 
   const personaCloudItems: PersonaCloudItem[] = useMemo(() => {
-    const counts = new Map<string, number>();
-    let totalCount = 0;
-    trendRows.forEach((r) => {
-      const key = r.personaId ?? r.persona;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-      totalCount += 1;
-    });
-
-    let maxCount = 0;
-    counts.forEach((v) => {
-      if (v > maxCount) maxCount = v;
-    });
+    const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+    const total = personaProfiles.reduce((acc, p) => acc + (p.memberCount ?? 0), 0);
+    const max = personaProfiles.reduce((acc, p) => Math.max(acc, p.memberCount ?? 0), 0);
 
     return personaProfiles.map((p) => {
-      const personaId = p.personaId || p.persona;
-      const c = counts.get(personaId) ?? 0;
-      // 기존 칩 클라우드가 "최소 1"로 보여주던 UX를 유지하면서도,
-      // 실제 count/ratio는 0을 그대로 전달한다.
-      const displayCount = c || 1;
-      const weight = Math.max(1, Math.min(5, displayCount));
-      const ratio = totalCount ? c / totalCount : 0;
-      const isTop = maxCount > 0 && c === maxCount;
-      return { personaId, label: p.persona, weight, count: c, ratio, isTop, value: displayCount };
-    });
-  }, [personaProfiles, trendRows]);
-
-  const mockPersonaCloudItems: PersonaCloudItem[] = useMemo(() => {
-    // personaProfilesForCloud 순서대로 count를 강제로 지정(비중 UI 확인용)
-    // 20개 페르소나에 대해 head + mid + long-tail 형태로 분포를 만든다.
-    const mockCountsByIndex = [160, 120, 95, 78, 64, 52, 44, 38, 33, 29, 25, 22, 19, 16, 13, 11, 9, 7, 5, 3];
-    const total = mockCountsByIndex.reduce((a, b) => a + b, 0);
-    const max = Math.max(...mockCountsByIndex);
-
-    return personaProfilesForCloud.map((p, idx) => {
-      const personaId = p.personaId || p.persona;
-      const c = mockCountsByIndex[idx] ?? 1;
+      const c = p.memberCount ?? 0;
       const ratio = total ? c / total : 0;
-      const isTop = c === max;
+      const isTop = max > 0 && c === max;
+      // 기존 UX: 0이어도 최소 1로 보여주되, 실제 count/ratio는 0을 유지
       const displayCount = c || 1;
-      const weight = Math.max(1, Math.min(5, displayCount));
-      return { personaId, label: p.persona, weight, count: c, ratio, isTop, value: displayCount };
+      const weight = max > 0 ? clamp(Math.round(1 + 4 * (c / max)), 1, 5) : 1;
+      return { personaId: p.personaId, label: p.persona, weight, count: c, ratio, isTop, value: displayCount };
     });
-  }, [personaProfilesForCloud]);
-
-  const personaCloudItemsToShow = USE_PERSONA_CLOUD_MOCK ? mockPersonaCloudItems : personaCloudItems;
+  }, [personaProfiles]);
 
   const personaRankRows = useMemo(() => {
-    const statsById = new Map<string, { count: number; ratio: number }>();
-    personaCloudItemsToShow.forEach((it) => {
-      statsById.set(it.personaId, { count: it.count ?? 0, ratio: it.ratio ?? 0 });
-    });
-
-    const profiles = USE_PERSONA_CLOUD_MOCK ? personaProfilesForCloud : personaProfiles;
-    const sorted = profiles
+    const total = personaProfiles.reduce((acc, p) => acc + (p.memberCount ?? 0), 0);
+    const sorted = personaProfiles
       .slice()
-      .sort((a, b) => (statsById.get(b.personaId)?.count ?? 0) - (statsById.get(a.personaId)?.count ?? 0));
-
+      .sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0));
     return sorted.map((p, idx) => {
-      const stat = statsById.get(p.personaId) ?? { count: 0, ratio: 0 };
-      return { rank: idx + 1, profile: p, count: stat.count, ratio: stat.ratio };
+      const count = p.memberCount ?? 0;
+      const ratio = total ? count / total : 0;
+      return { rank: idx + 1, profile: p, count, ratio };
     });
-  }, [USE_PERSONA_CLOUD_MOCK, personaCloudItemsToShow, personaProfiles, personaProfilesForCloud]);
+  }, [personaProfiles]);
 
   const handleRowClick = (row: TableRowData) => {
     setSelectedRow(row);
     setDetailInitialDialog(null);
+    setDrawerOpen(true);
+  };
+
+  const handleChangeScheduleClick = (row: TableRowData) => {
+    setSelectedRow(row);
+    setDetailInitialDialog('schedule');
     setDrawerOpen(true);
   };
 
@@ -250,11 +211,10 @@ function App() {
   };
 
   const handlePersonaSelect = (personaId: string) => {
-    const pool = USE_PERSONA_CLOUD_MOCK ? personaProfilesForCloud : personaProfiles;
     // 워드클라우드/랭킹 테이블에서 넘어오는 값이 personaId가 아닐 수도 있어 fallback을 둔다.
     const found =
-      pool.find((p) => p.personaId === personaId) ??
-      pool.find((p) => p.persona === personaId) ??
+      personaProfiles.find((p) => p.personaId === personaId) ??
+      personaProfiles.find((p) => p.persona === personaId) ??
       null;
     // 그래도 못 찾으면, 최소 정보로라도 드로어가 열리도록 fallback 프로필을 만든다.
     setSelectedPersona(
@@ -272,13 +232,6 @@ function App() {
   const handleProductClick = (row: TableRowData) => {
     if (!row.productUrl) return;
     window.open(row.productUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleChangeScheduleClick = (row: TableRowData) => {
-    // 테이블에서 시간 변경 클릭 시: drawer는 열지 않고, 독립 모달만 오픈
-    setTableScheduleRow(row);
-    setTableScheduleTime(row.time ?? '');
-    setTableScheduleOpen(true);
   };
 
   const replaceRow = (next: TableRowData) => {
@@ -327,7 +280,14 @@ function App() {
                 onPersonaClick={openPersonaByRow}
                 onProductClick={handleProductClick}
                 onChangeScheduleClick={handleChangeScheduleClick}
-                defaultSelectedDate={dayjs()}
+                defaultSelectedDate={null}
+                onDateFilterChange={(dateStr) => {
+                  setReservationsScheduledAt(dateStr);
+                  setReservationsPage(1);
+                }}
+                page={reservationsPage}
+                pageCount={reservationsPageCount}
+                onPageChange={(next) => setReservationsPage(next)}
                 pageSize={10}
                 variant="trend"
               />
@@ -344,7 +304,7 @@ function App() {
                 </Typography>
                 </Box>
               </Box>
-              <PersonaCloud items={personaCloudItemsToShow} onSelect={handlePersonaSelect} />
+              <PersonaCloud items={personaCloudItems} onSelect={handlePersonaSelect} />
               <PersonaRankTable rows={personaRankRows} onSelectPersona={handlePersonaSelect} />
             </>
           )}
@@ -363,33 +323,6 @@ function App() {
         onShowToast={showToast}
         onReplaceRow={replaceRow}
         onPatchRow={patchRow}
-      />
-
-      <ScheduleChangeModal
-        open={tableScheduleOpen}
-        row={tableScheduleRow}
-        value={tableScheduleTime}
-        onChange={setTableScheduleTime}
-        onClose={() => {
-          setTableScheduleOpen(false);
-          setTableScheduleRow(null);
-          setTableScheduleTime('');
-        }}
-        onConfirm={(payload) => {
-          console.log('[테이블 시간 변경]', payload);
-          void (async () => {
-            try {
-              const scheduledAt = dayjs(payload.after, 'YYYY-MM-DD HH:mm').format('YYYY-MM-DDTHH:mm:00');
-              await updateReservationSchedule(payload.id, scheduledAt);
-              const fresh = await getReservationDetail(payload.id);
-              replaceRow(mapReservationDtoToTableRow(fresh));
-              showToast({ severity: 'success', message: '발송 시간을 변경했어요.', detail: `변경 후: ${payload.after}` });
-            } catch (e) {
-              console.error(e);
-              showToast({ severity: 'error', message: '시간 변경에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
-            }
-          })();
-        }}
       />
 
       <PersonaDrawer

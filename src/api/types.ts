@@ -53,6 +53,8 @@ export interface TableRowData {
 export interface PersonaProfile {
   personaId: string;
   persona: string;
+  /** 해당 페르소나에 속한 고객 수 (persona-types API) */
+  memberCount?: number;
   ageGroup?: string;
   mainCategory?: string;
   purchaseMethod?: string;

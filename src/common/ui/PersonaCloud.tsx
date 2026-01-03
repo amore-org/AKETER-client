@@ -1,7 +1,6 @@
 // src/common/ui/PersonaCloud.tsx
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { ParentSize } from '@visx/responsive';
 import { Wordcloud } from '@visx/wordcloud';
 import styled from 'styled-components';
 import { amoreTokens } from '../../styles/theme';
@@ -211,6 +210,9 @@ const resolveCircleCollisions = (nodes: PositionedBubble[], bounds: { halfW: num
 
 export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
   const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
+  const nodesRef = useRef<PositionedBubble[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const metaByLabel = useMemo(() => {
     const map = new Map<string, PersonaCloudItem>();
     for (const it of items) map.set(it.label, it);
@@ -249,17 +251,355 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
     return s || 1;
   }, [items]);
 
-  if (!items.length) {
-    return (
-      <CloudWrap>
-        <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-          표시할 페르소나가 없어요.
-        </Typography>
-      </CloudWrap>
-    );
-  }
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      const next = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
+      setContainerSize((prev) => (prev.width === next.width && prev.height === next.height ? prev : next));
+    };
+
+    // 초기 렌더 직후에는 레이아웃이 아직 확정되지 않아 0으로 측정되는 경우가 있어
+    // rAF로 한 번 더 측정해 "새로고침 시 빈 화면" 케이스를 방지한다.
+    update();
+    const raf1 = window.requestAnimationFrame(update);
+    const raf2 = window.requestAnimationFrame(update);
+
+    // ResizeObserver가 없으면 window resize로 degrade
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update);
+      return () => {
+        window.cancelAnimationFrame(raf1);
+        window.cancelAnimationFrame(raf2);
+        window.removeEventListener('resize', update);
+      };
+    }
+
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+      ro.disconnect();
+    };
+  }, [items.length]);
 
   const isClickable = Boolean(onSelect);
+
+  const renderCloud = (width: number, height: number) => {
+    const w = Math.max(10, Math.floor(width));
+    const h = Math.max(10, Math.floor(height));
+    const halfW = w / 2;
+    const halfH = h / 2;
+
+    // 1순위: 원끼리 절대 겹치지 않기.
+    // 영역이 좁아져서 수용 불가능해질 때는 하위 순위(값이 작은) 원을 렌더링하지 않는다.
+    const itemsSorted = items.slice().sort((a, b) => (b.value ?? b.count ?? 0) - (a.value ?? a.count ?? 0));
+
+    const visibleItems: PersonaCloudItem[] = [];
+    const availArea = Math.max(1, w * h);
+    // 원형 패킹은 이론적으로 1에 못 미치므로 안전하게 여유를 둔다.
+    const packFactor = 1;
+    let usedArea = 0;
+
+    const estimatedFontFromValue = (v: number) => {
+      const vv = Math.max(1, v);
+      // 기존 fontSize()와 동일한 스케일을 사용하기 위해 아래에서 values/min/max를 계산한 뒤 다시 덮어쓴다.
+      return vv;
+    };
+
+    // 아래에서 min/max를 쓰기 위해 일단 words 후보를 만든다.
+    const candidates: CloudDatum[] = itemsSorted.map((it) => ({
+      text: it.label,
+      value: it.value ?? Math.max(1, it.count ?? 1),
+      personaId: it.personaId,
+      isTop: it.isTop,
+      count: it.count,
+      ratio: it.ratio,
+    }));
+
+    const values = candidates.map((d) => d.value);
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const minFont = 14;
+    const maxFont = 52;
+
+    const fontSize = (v: number) => {
+      if (!Number.isFinite(v)) return minFont;
+      if (minVal === maxVal) return (minFont + maxFont) / 2;
+      const t = (Math.sqrt(clamp(v, minVal, maxVal)) - Math.sqrt(minVal)) / (Math.sqrt(maxVal) - Math.sqrt(minVal));
+      return minFont + clamp(t, 0, 1) * (maxFont - minFont);
+    };
+
+    for (const it of itemsSorted) {
+      const v = it.value ?? Math.max(1, it.count ?? 1);
+      const fs = fontSize(estimatedFontFromValue(v));
+      const r = clamp(fs * (0.9 + Math.min(8, it.label.length) * 0.18), fs * 1.15, fs * 3.2);
+      const collisionR = (r + 6) * HOVER_SCALE;
+      const area = Math.PI * collisionR * collisionR;
+      if (visibleItems.length >= 1 && usedArea + area > availArea * packFactor) {
+        break;
+      }
+      visibleItems.push(it);
+      usedArea += area;
+    }
+
+    const words: CloudDatum[] = visibleItems.map((it) => ({
+      text: it.label,
+      value: it.value ?? Math.max(1, it.count ?? 1),
+      personaId: it.personaId,
+      isTop: it.isTop,
+      count: it.count,
+      ratio: it.ratio,
+    }));
+
+    // Hover/click hit-test is computed geometrically to avoid border jitter.
+    const hitRadiusFor = (n: PositionedBubble) => Math.max(6, n.bubbleRadius * 0.9 - 2);
+
+    const pickBubbleAt = (x: number, y: number) => {
+      const nodes = nodesRef.current;
+      if (!nodes.length) return null;
+
+      // Hysteresis: keep current hover if still inside.
+      if (hoveredPersonaId) {
+        const cur = nodes.find((nn) => nn.personaId === hoveredPersonaId);
+        if (cur) {
+          const r = hitRadiusFor(cur);
+          const dx = x - cur.x;
+          const dy = y - cur.y;
+          if (dx * dx + dy * dy <= r * r) return cur;
+        }
+      }
+
+      let best: PositionedBubble | null = null;
+      let bestScore = Infinity;
+      for (const nn of nodes) {
+        const r = hitRadiusFor(nn);
+        const dx = x - nn.x;
+        const dy = y - nn.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > r * r) continue;
+        // Normalize so larger circles don't always win; choose closest to center.
+        const score = d2 / (r * r);
+        if (score < bestScore) {
+          bestScore = score;
+          best = nn;
+        }
+      }
+      return best;
+    };
+
+    const eventToLocalPoint = (e: { currentTarget: SVGSVGElement; clientX: number; clientY: number }) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      // nodes are in a centered coordinate system.
+      return { x: px - halfW, y: py - halfH };
+    };
+
+    return (
+      <svg
+        width={w}
+        height={h}
+        role="img"
+        aria-label="페르소나 워드클라우드"
+        onPointerMove={(e) => {
+          const { x, y } = eventToLocalPoint(e);
+          const picked = pickBubbleAt(x, y);
+          const nextId = picked?.personaId ?? null;
+          if (nextId !== hoveredPersonaId) setHoveredPersonaId(nextId);
+        }}
+        onPointerLeave={() => setHoveredPersonaId(null)}
+        onClick={(e) => {
+          // Screen-reader activation often triggers click with detail=0 and no reliable coordinates.
+          if (!isClickable) return;
+          if (e.detail === 0) return;
+          const { x, y } = eventToLocalPoint(e);
+          const picked = pickBubbleAt(x, y);
+          if (picked) onSelect?.(picked.personaId);
+        }}
+      >
+        <Wordcloud
+          words={words}
+          width={w}
+          height={h}
+          padding={2}
+          font={amoreTokens.typography.fontFamily}
+          fontSize={(d) => fontSize((d as CloudDatum).value)}
+          fontWeight={(d) => ((d as CloudDatum).isTop ? TOP_WORD_FONT_WEIGHT : BASE_WORD_FONT_WEIGHT)}
+          rotate={() => 0}
+          spiral="rectangular"
+          random={seededRandom(seed)}
+        >
+          {(cloudWords) => {
+            const nodes: PositionedBubble[] = cloudWords.map((cw) => {
+              const wAny = cw as unknown as CloudDatum & {
+                x: number;
+                y: number;
+                rotate: number;
+                size: number;
+              };
+              const meta = metaByLabel.get(wAny.text);
+              const personaId = meta?.personaId ?? wAny.personaId ?? wAny.text;
+
+              const t = clamp((wAny.size - minFont) / (maxFont - minFont), 0, 1);
+              // 투명도(알파) 대신, 메인 컬러를 기준으로 "명도 단계"를 넓게 가져간다.
+              // (겹치거나 가까울 때도 색이 섞이지 않아 가독성이 좋다)
+              const base = amoreTokens.colors.brand.pacificBlue;
+              const white = amoreTokens.colors.common.white;
+              const black = amoreTokens.colors.common.black;
+
+              // 작은 원: 거의 흰색에 가까운 tint, 큰 원: base에 가까운 shade
+              const baseMix = 0.08 + t * 0.92; // 0.08 ~ 1.0 (차이를 크게)
+              const tinted = mixHex(white, base, baseMix);
+              // 최대 구간에서는 살짝 더 딥하게(black 쪽으로 아주 약간)
+              const deep = t > 0.9 ? mixHex(tinted, black, ((t - 0.9) / 0.1) * 0.12) : tinted;
+
+              const bg = deep;
+              const textFill = pickTextColor(bg);
+
+              const bubbleRadius = clamp(
+                wAny.size * (0.9 + Math.min(8, wAny.text.length) * 0.18),
+                wAny.size * 1.15,
+                wAny.size * 3.2,
+              );
+
+              // top ring(+4)과 hover stroke 등을 고려해 충돌 반지름은 여유를 둔다.
+              // hover 시 살짝 커지는 애니메이션이 있어도 겹치지 않도록 "hover 최대 스케일"을 반영한다.
+              const collisionRadius = (bubbleRadius + 6) * HOVER_SCALE;
+
+              const fitted = fitTextInCircle(wAny.text, bubbleRadius);
+
+              return {
+                personaId,
+                text: wAny.text,
+                lines: fitted.lines,
+                x: wAny.x,
+                y: wAny.y,
+                rotate: wAny.rotate,
+                size: wAny.size,
+                bg,
+                textFill,
+                ringStroke: amoreTokens.colors.transparent.black10,
+                bubbleRadius,
+                collisionRadius,
+                fittedFontSize: fitted.fontSize,
+                isTop: meta?.isTop ?? wAny.isTop,
+                count: meta?.count ?? wAny.count,
+                ratio: meta?.ratio ?? wAny.ratio,
+              };
+            });
+
+            resolveCircleCollisions(nodes, { halfW, halfH });
+            nodesRef.current = nodes;
+
+            return nodes.map((n, idx) => {
+              const isHovered = hoveredPersonaId != null && hoveredPersonaId === n.personaId;
+              const ringStroke = isHovered
+                ? amoreTokens.colors.brand.pacificBlue
+                : n.isTop
+                  ? amoreTokens.colors.brand.pacificBlue
+                  : amoreTokens.colors.transparent.black10;
+              const pct = n.ratio != null ? Math.round(n.ratio * 100) : null;
+              const scale = isHovered ? HOVER_SCALE : 1;
+
+              return (
+                <g
+                  key={`${n.personaId}-${idx}`}
+                  transform={`translate(${n.x}, ${n.y}) rotate(${n.rotate}) scale(${scale})`}
+                  style={{
+                    cursor: isClickable ? 'pointer' : 'default',
+                    userSelect: 'none',
+                    transition: 'transform 150ms ease, filter 150ms ease',
+                    transformOrigin: 'center',
+                    outline: 'none',
+                  }}
+                  onFocus={() => setHoveredPersonaId(n.personaId)}
+                  onBlur={() => setHoveredPersonaId(null)}
+                  onClick={
+                    isClickable
+                      ? (e) => {
+                          // a11y activation (screen-reader) / non-pointer click.
+                          if (e.detail !== 0) return;
+                          onSelect?.(n.personaId);
+                        }
+                      : undefined
+                  }
+                  role={isClickable ? 'button' : undefined}
+                  tabIndex={isClickable ? 0 : -1}
+                  onKeyDown={(e) => {
+                    if (!isClickable) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect?.(n.personaId);
+                    }
+                  }}
+                  aria-label={`${n.text}${n.count != null ? ` (${n.count}건)` : ''}`}
+                  // scale 대신 간단한 glow 느낌 (겹침 없음)
+                  filter={isHovered ? 'drop-shadow(0px 4px 10px rgba(0,0,0,0.12))' : undefined}
+                >
+                  <title>
+                    {n.text}
+                    {n.count != null ? ` · ${n.count}건` : ''}
+                    {pct != null ? ` · ${pct}%` : ''}
+                  </title>
+
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={n.bubbleRadius}
+                    fill={n.bg}
+                    stroke={ringStroke}
+                    strokeWidth={isHovered ? 2 : n.isTop ? 1.5 : 1}
+                  />
+
+                  {n.isTop && (
+                    <circle
+                      cx={0}
+                      cy={0}
+                      r={n.bubbleRadius + 4}
+                      fill="transparent"
+                      stroke={amoreTokens.colors.brand.pacificBlue}
+                      strokeWidth={2}
+                    />
+                  )}
+
+                  <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill={n.textFill}
+                    fontFamily={amoreTokens.typography.fontFamily}
+                    fontSize={n.fittedFontSize}
+                    fontWeight={n.isTop ? TOP_WORD_FONT_WEIGHT : BASE_WORD_FONT_WEIGHT}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {n.lines.length <= 1 ? (
+                      n.lines[0]
+                    ) : (
+                      n.lines.map((line, li) => (
+                        <tspan
+                          key={`${n.personaId}-l-${li}`}
+                          x={0}
+                          // 멀티라인일 때 텍스트 블록 자체가 원의 정중앙에 오도록 dy를 계산
+                          dy={li === 0 ? `${-((n.lines.length - 1) / 2) * LINE_HEIGHT_EM}em` : `${LINE_HEIGHT_EM}em`}
+                        >
+                          {line}
+                        </tspan>
+                      ))
+                    )}
+                  </text>
+                </g>
+              );
+            });
+          }}
+        </Wordcloud>
+      </svg>
+    );
+  };
 
   return (
     <CloudWrap>
@@ -285,272 +625,41 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
       )}
 
       <Box sx={{ width: '100%', height: 720, padding: amoreTokens.spacing(3) }}>
-        <ParentSize debounceTime={120}>
-          {({ width, height }) => {
-            const w = Math.max(10, Math.floor(width));
-            const h = Math.max(10, Math.floor(height));
-
-            // 1순위: 원끼리 절대 겹치지 않기.
-            // 영역이 좁아져서 수용 불가능해질 때는 하위 순위(값이 작은) 원을 렌더링하지 않는다.
-            const itemsSorted = items
-              .slice()
-              .sort((a, b) => (b.value ?? b.count ?? 0) - (a.value ?? a.count ?? 0));
-
-            const visibleItems: PersonaCloudItem[] = [];
-            const availArea = Math.max(1, w * h);
-            // 원형 패킹은 이론적으로 1에 못 미치므로 안전하게 여유를 둔다.
-            const packFactor = 1;
-            let usedArea = 0;
-
-            const estimatedFontFromValue = (v: number) => {
-              const vv = Math.max(1, v);
-              // 기존 fontSize()와 동일한 스케일을 사용하기 위해 아래에서 values/min/max를 계산한 뒤 다시 덮어쓴다.
-              return vv;
-            };
-
-            // 아래에서 min/max를 쓰기 위해 일단 words 후보를 만든다.
-            const candidates: CloudDatum[] = itemsSorted.map((it) => ({
-              text: it.label,
-              value: it.value ?? Math.max(1, it.count ?? 1),
-              personaId: it.personaId,
-              isTop: it.isTop,
-              count: it.count,
-              ratio: it.ratio,
-            }));
-
-            const values = candidates.map((d) => d.value);
-            const minVal = Math.min(...values);
-            const maxVal = Math.max(...values);
-            const minFont = 14;
-            const maxFont = 52;
-
-            const fontSize = (v: number) => {
-              if (!Number.isFinite(v)) return minFont;
-              if (minVal === maxVal) return (minFont + maxFont) / 2;
-              const t =
-                (Math.sqrt(clamp(v, minVal, maxVal)) - Math.sqrt(minVal)) / (Math.sqrt(maxVal) - Math.sqrt(minVal));
-              return minFont + clamp(t, 0, 1) * (maxFont - minFont);
-            };
-
-            for (const it of itemsSorted) {
-              const v = it.value ?? Math.max(1, it.count ?? 1);
-              const fs = fontSize(estimatedFontFromValue(v));
-              const r = clamp(fs * (0.9 + Math.min(8, it.label.length) * 0.18), fs * 1.15, fs * 3.2);
-              const collisionR = (r + 6) * HOVER_SCALE;
-              const area = Math.PI * collisionR * collisionR;
-              if (visibleItems.length >= 1 && usedArea + area > availArea * packFactor) {
-                break;
-              }
-              visibleItems.push(it);
-              usedArea += area;
-            }
-
-            const words: CloudDatum[] = visibleItems.map((it) => ({
-              text: it.label,
-              value: it.value ?? Math.max(1, it.count ?? 1),
-              personaId: it.personaId,
-              isTop: it.isTop,
-              count: it.count,
-              ratio: it.ratio,
-            }));
-
-            return (
-              <svg width={w} height={h} role="img" aria-label="페르소나 워드클라우드">
-                <Wordcloud
-                  words={words}
-                  width={w}
-                  height={h}
-                  padding={2}
-                  font={amoreTokens.typography.fontFamily}
-                  fontSize={(d) => fontSize((d as CloudDatum).value)}
-                  fontWeight={(d) => ((d as CloudDatum).isTop ? TOP_WORD_FONT_WEIGHT : BASE_WORD_FONT_WEIGHT)}
-                  rotate={() => 0}
-                  spiral="rectangular"
-                  random={seededRandom(seed)}
-                >
-                  {(cloudWords) => {
-                    const halfW = w / 2;
-                    const halfH = h / 2;
-
-                    const nodes: PositionedBubble[] = cloudWords.map((cw) => {
-                      const wAny = cw as unknown as CloudDatum & {
-                        x: number;
-                        y: number;
-                        rotate: number;
-                        size: number;
-                      };
-                      const meta = metaByLabel.get(wAny.text);
-                      const personaId = meta?.personaId ?? wAny.personaId ?? wAny.text;
-
-                      const t = clamp((wAny.size - minFont) / (maxFont - minFont), 0, 1);
-                      // 투명도(알파) 대신, 메인 컬러를 기준으로 "명도 단계"를 넓게 가져간다.
-                      // (겹치거나 가까울 때도 색이 섞이지 않아 가독성이 좋다)
-                      const base = amoreTokens.colors.brand.pacificBlue;
-                      const white = amoreTokens.colors.common.white;
-                      const black = amoreTokens.colors.common.black;
-
-                      // 작은 원: 거의 흰색에 가까운 tint, 큰 원: base에 가까운 shade
-                      const baseMix = 0.08 + t * 0.92; // 0.08 ~ 1.0 (차이를 크게)
-                      const tinted = mixHex(white, base, baseMix);
-                      // 최대 구간에서는 살짝 더 딥하게(black 쪽으로 아주 약간)
-                      const deep = t > 0.9 ? mixHex(tinted, black, (t - 0.9) / 0.1 * 0.12) : tinted;
-
-                      const bg = deep;
-                      const textFill = pickTextColor(bg);
-
-                      const bubbleRadius = clamp(
-                        wAny.size * (0.9 + Math.min(8, wAny.text.length) * 0.18),
-                        wAny.size * 1.15,
-                        wAny.size * 3.2,
-                      );
-
-                      // top ring(+4)과 hover stroke 등을 고려해 충돌 반지름은 여유를 둔다.
-                      // hover 시 살짝 커지는 애니메이션이 있어도 겹치지 않도록 "hover 최대 스케일"을 반영한다.
-                      const collisionRadius = (bubbleRadius + 6) * HOVER_SCALE;
-
-                      const fitted = fitTextInCircle(wAny.text, bubbleRadius);
-
-                      return {
-                        personaId,
-                        text: wAny.text,
-                        lines: fitted.lines,
-                        x: wAny.x,
-                        y: wAny.y,
-                        rotate: wAny.rotate,
-                        size: wAny.size,
-                        bg,
-                        textFill,
-                        ringStroke: amoreTokens.colors.transparent.black10,
-                        bubbleRadius,
-                        collisionRadius,
-                        fittedFontSize: fitted.fontSize,
-                        isTop: meta?.isTop ?? wAny.isTop,
-                        count: meta?.count ?? wAny.count,
-                        ratio: meta?.ratio ?? wAny.ratio,
-                      };
-                    });
-
-                    resolveCircleCollisions(nodes, { halfW, halfH });
-
-                    return nodes.map((n, idx) => {
-                      const isHovered = hoveredPersonaId != null && hoveredPersonaId === n.personaId;
-                      const ringStroke = isHovered
-                        ? amoreTokens.colors.brand.pacificBlue
-                        : n.isTop
-                          ? amoreTokens.colors.brand.pacificBlue
-                          : amoreTokens.colors.transparent.black10;
-                      const pct = n.ratio != null ? Math.round(n.ratio * 100) : null;
-                      const scale = isHovered ? HOVER_SCALE : 1;
-
-          return (
-                        <g
-                          key={`${n.personaId}-${idx}`}
-                          transform={`translate(${n.x}, ${n.y}) rotate(${n.rotate}) scale(${scale})`}
-                          style={{
-                            cursor: isClickable ? 'pointer' : 'default',
-                            userSelect: 'none',
-                            transition: 'transform 150ms ease, filter 150ms ease',
-                            transformOrigin: 'center',
-                            outline: 'none',
-                          }}
-                          onMouseEnter={() => setHoveredPersonaId(n.personaId)}
-                          onMouseLeave={() => setHoveredPersonaId(null)}
-                          onFocus={() => setHoveredPersonaId(n.personaId)}
-                          onBlur={() => setHoveredPersonaId(null)}
-                          // SVG 클릭이 브라우저/디바이스에 따라 씹히는 케이스가 있어 pointer 이벤트로 보강한다.
-                          onPointerDown={(e) => {
-                            if (!isClickable) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onSelect?.(n.personaId);
-                          }}
-                          onClick={
-                            isClickable
-                              ? (e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  onSelect?.(n.personaId);
-                                }
-                              : undefined
-                          }
-                          role={isClickable ? 'button' : undefined}
-                          tabIndex={isClickable ? 0 : -1}
-                          onKeyDown={(e) => {
-                            if (!isClickable) return;
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              onSelect?.(n.personaId);
-                            }
-                          }}
-                          aria-label={`${n.text}${n.count != null ? ` (${n.count}건)` : ''}`}
-                          // scale 대신 간단한 glow 느낌 (겹침 없음)
-                          filter={isHovered ? 'drop-shadow(0px 4px 10px rgba(0,0,0,0.12))' : undefined}
-                        >
-                          <title>
-                            {n.text}
-                            {n.count != null ? ` · ${n.count}건` : ''}
-                            {pct != null ? ` · ${pct}%` : ''}
-                          </title>
-
-                          <circle
-                            cx={0}
-                            cy={0}
-                            r={n.bubbleRadius}
-                            fill={n.bg}
-                            stroke={ringStroke}
-                            strokeWidth={isHovered ? 2 : n.isTop ? 1.5 : 1}
-                          />
-
-                          {n.isTop && (
-                            <circle
-                              cx={0}
-                              cy={0}
-                              r={n.bubbleRadius + 4}
-                              fill="transparent"
-                              stroke={amoreTokens.colors.brand.pacificBlue}
-                              strokeWidth={2}
-                            />
-                          )}
-
-                          <text
-                            x={0}
-                            y={0}
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            fill={n.textFill}
-                            fontFamily={amoreTokens.typography.fontFamily}
-                            fontSize={n.fittedFontSize}
-                            fontWeight={n.isTop ? TOP_WORD_FONT_WEIGHT : BASE_WORD_FONT_WEIGHT}
-                            style={{ pointerEvents: 'none' }}
-                          >
-                            {n.lines.length <= 1 ? (
-                              n.lines[0]
-                            ) : (
-                              n.lines.map((line, li) => (
-                                <tspan
-                                  key={`${n.personaId}-l-${li}`}
-                                  x={0}
-                                  // 멀티라인일 때 텍스트 블록 자체가 원의 정중앙에 오도록 dy를 계산
-                                  dy={
-                                    li === 0
-                                      ? `${-((n.lines.length - 1) / 2) * LINE_HEIGHT_EM}em`
-                                      : `${LINE_HEIGHT_EM}em`
-                                  }
-                                >
-                                  {line}
-                                </tspan>
-                              ))
-                            )}
-                          </text>
-                        </g>
-                      );
-                    });
-                  }}
-                </Wordcloud>
-              </svg>
-            );
-          }}
-        </ParentSize>
+        <Box ref={containerRef} sx={{ width: '100%', height: '100%' }}>
+          {!items.length ? (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: amoreTokens.spacing(3),
+                boxSizing: 'border-box',
+              }}
+            >
+              <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
+                페르소나를 불러오는 중이거나, 표시할 데이터가 없어요.
+              </Typography>
+            </Box>
+          ) : containerSize.width < 40 || containerSize.height < 40 ? (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
+                워드클라우드를 불러오는 중이에요…
+              </Typography>
+            </Box>
+          ) : (
+            renderCloud(containerSize.width, containerSize.height)
+          )}
+        </Box>
       </Box>
     </CloudWrap>
   );
