@@ -1,10 +1,8 @@
-// src/App.tsx
 import { Box, Typography } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { TopNavbar } from './common/ui/TopNavbar';
 import { MainTabs } from './common/ui/MainTabs';
-import { amoreTokens } from './styles/theme';
 import { DataTable } from './common/ui/DataTable';
 import type { TableRowData } from './common/ui/DataTable';
 import { DetailDrawer } from './common/ui/DetailDrawer';
@@ -17,8 +15,8 @@ import { getReservations, getReservationsToday, mapReservationDtoToTableRow } fr
 import { getPersonaTypes } from './api/personaTypes';
 import { HttpError } from './api/http';
 
-const NAVBAR_HEIGHT = amoreTokens.spacing(8);
-const TABS_HEIGHT = amoreTokens.spacing(6);
+const NAVBAR_HEIGHT = amoreTokens.spacing(8); // 4rem
+const TABS_HEIGHT = amoreTokens.spacing(6); // 3rem
 
 const ContentScrollArea = styled(Box)`
   height: 100vh;
