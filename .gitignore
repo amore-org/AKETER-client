@@ -4,6 +4,9 @@ dist/
 dist-ssr/
 *.local
 
+# Local-only embedded repo (avoid stash/merge noise)
+zsh-autosuggestions/
+
 # Environment Variables (CRITICAL)
 .env
 .env.*
@@ -42,6 +45,9 @@ $RECYCLE.BIN/
 *.back.*
 *.sw?
 *.stackdump
+
+# Local-only docs
+docs/
 
 # Editor directories and files
 *.suo

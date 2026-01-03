@@ -2,6 +2,36 @@
 
 CRM 메시지 자동 제작을 위한 AI Agent 클라이언트 애플리케이션입니다.
 
+## 개발 환경 (Node)
+
+이 프로젝트는 **Node.js 20+**를 기준으로 동작합니다.
+
+## API 연결(로컬 개발)
+
+Vite 개발 서버에서 `/api` 호출을 백엔드로 프록시하려면 아래 환경변수 중 하나를 설정하세요.
+
+- `VITE_API_PROXY_TARGET`: (권장) 예) `http://localhost:8080`
+- `VITE_API_BASE_URL`: 프론트의 baseURL 오버라이드 용도이며, dev에서는 proxy target으로도 사용됩니다.
+
+예시:
+
+```bash
+export VITE_API_PROXY_TARGET="http://localhost:8080"
+npm run dev
+```
+
+### asdf 사용 시
+
+- 버전은 루트의 `.tool-versions`를 따릅니다.
+
+```bash
+asdf plugin add nodejs || true
+asdf install
+node -v
+npm ci
+npm run dev
+```
+
 # PUSH 권한 테스트
 # 테스트
 
