@@ -1,5 +1,5 @@
 import { Box, Typography } from "@mui/material";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { TopNavbar } from "./common/ui/TopNavbar";
 import { MainTabs } from "./common/ui/MainTabs";
@@ -83,9 +83,9 @@ function App() {
         detail: undefined,
     });
 
-    const showToast = (payload: Omit<ToastState, "open">) => {
+    const showToast = useCallback((payload: Omit<ToastState, "open">) => {
         setToast({ open: true, ...payload });
-    };
+    }, []);
 
     const tabKey = useMemo(() => tabIndexToKey(tabValue), [tabValue]);
 
@@ -133,17 +133,32 @@ function App() {
         // 페르소나 유형 조회 (docs/API.md: /api/persona-types)
         void (async () => {
             try {
-                const first = await getPersonaTypes({ page: 0, size: 200 });
-                let all = first.items.slice();
-                const totalPages = Math.max(1, first.totalPages || 1);
-                if (totalPages > 1) {
-                    const rest = await Promise.all(
-                        Array.from({ length: totalPages - 1 }, (_, i) => getPersonaTypes({ page: i + 1, size: 200 }))
-                    );
-                    rest.forEach((p) => {
-                        all = all.concat(p.items);
+                // NOTE:
+                // - 백엔드의 totalPages가 비정상적으로 큰 값으로 내려오면, Promise.all로 페이지를 전부 당겨오며
+                //   수천 건 요청 폭주가 발생할 수 있다(예: 1719 requests).
+                // - totalPages 대신 isLast(=Spring Page의 last) 기반으로 순차 페이징하고, 안전 상한을 둔다.
+                const PAGE_SIZE = 200;
+                const MAX_PAGES = 50; // 안전장치(필요 시 조정)
+
+                let page = 0;
+                let all: PersonaProfile[] = [];
+                let last = false;
+
+                while (!last && page < MAX_PAGES) {
+                    const res = await getPersonaTypes({ page, size: PAGE_SIZE });
+                    all = all.concat(res.items);
+                    last = Boolean(res.isLast) || res.items.length === 0;
+                    page += 1;
+                }
+
+                if (!last) {
+                    showToast({
+                        severity: "warning",
+                        message: "페르소나 목록이 너무 많아 일부만 불러왔어요.",
+                        detail: "백엔드 페이지 정보(totalPages/last)를 확인해 주세요.",
                     });
                 }
+
                 setPersonaProfiles(all);
             } catch (e) {
                 console.error(e);
@@ -241,15 +256,15 @@ function App() {
         window.open(row.productUrl, "_blank", "noopener,noreferrer");
     };
 
-    const replaceRow = (next: TableRowData) => {
+    const replaceRow = useCallback((next: TableRowData) => {
         setTrendRows((prev) => prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)));
         setSelectedRow((prev) => (prev?.id === next.id ? { ...prev, ...next } : prev));
-    };
+    }, []);
 
-    const patchRow = (id: number, patch: Partial<TableRowData>) => {
+    const patchRow = useCallback((id: number, patch: Partial<TableRowData>) => {
         setTrendRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
         setSelectedRow((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
-    };
+    }, []);
 
     useEffect(() => {
         const onHashChange = () => {
