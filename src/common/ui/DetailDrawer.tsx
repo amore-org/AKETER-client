@@ -1,5 +1,6 @@
 // src/common/ui/DetailDrawer.tsx
-import { useMemo, useState } from 'react';
+import dayjs from 'dayjs';
+import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { 
   Drawer,
@@ -8,19 +9,17 @@ import {
   IconButton,
   Divider,
   Stack,
-  Button,
-  TextField,
   Tooltip,
+  TextField,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import dayjs from 'dayjs';
 import { amoreTokens } from '../../styles/theme';
 import { AppChip, StatusChip } from './Chip';
 import type { TableRowData } from './DataTable';
 import { getStatusLabel } from '../../features/reservations/statusLabels';
 import { Button as AppButton } from './Button';
-import { ConfirmModal, ScheduleChangeModal } from './ConfirmModal';
 import { channelBadgeSx } from './channel';
+import { ConfirmModal, ScheduleChangeModal } from './ConfirmModal';
 import { cancelReservation, getReservationDetail, mapReservationDtoToTableRow, updateReservationSchedule } from '../../api/reservations';
 
 const DrawerWrapper = styled(Box)`
@@ -79,29 +78,65 @@ export const DetailDrawer = ({
   onReplaceRow,
   initialDialog = null,
 }: DetailDrawerProps) => {
-  const canEditSchedule = Boolean(data && data.status === 'info');
-
   const statusLabel = useMemo(() => {
     if (!data) return '';
     return getStatusLabel(data.status);
   }, [data]);
 
-  const [scheduleModalOpen, setScheduleModalOpen] = useState<boolean>(initialDialog === 'schedule');
-  const [nextTime, setNextTime] = useState<string>(data?.time ?? '');
-
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(initialDialog === 'cancel');
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [nextTime, setNextTime] = useState('');
 
-  const handleChangeSchedule = () => {
-    if (!data) return;
-    setNextTime(data.time ?? '');
-    setScheduleModalOpen(true);
-  };
+  const canEditSchedule = useMemo(() => {
+    if (!data) return false;
+    if (data.status !== 'info') return false;
+    const scheduledAt = dayjs(`${data.date} ${data.time}`, 'YYYY-MM-DD HH:mm');
+    if (!scheduledAt.isValid()) return false;
+    return scheduledAt.isAfter(dayjs());
+  }, [data]);
 
-  const handleCancelSend = () => {
+  // 드로어가 열렸을 때(또는 row가 바뀔 때) 상세 조회로 추천이유 등 보강
+  useEffect(() => {
+    if (!open || !data) return;
+    if (data.recommendedReason) return; // 이미 있으면 재조회 생략
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detail = await getReservationDetail(data.id);
+        if (cancelled) return;
+        const row = mapReservationDtoToTableRow(detail);
+        onReplaceRow?.(row);
+      } catch (e) {
+        // 상세 조회 실패는 치명적이지 않으므로 조용히 토스트만
+        console.error(e);
+        onShowToast?.({
+          severity: 'warning',
+          message: '상세 정보를 일부 불러오지 못했어요.',
+          detail: '추천 이유 등 일부 항목이 누락될 수 있어요.',
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data, onReplaceRow, onShowToast, open]);
+
+  // initialDialog 처리(렌더 시점 초기값)
+  useEffect(() => {
+    if (!open || !data) return;
+    if (initialDialog === 'schedule') setScheduleOpen(true);
+    if (initialDialog === 'cancel') setCancelOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, data?.id]);
+
+  // schedule modal 초기값
+  useEffect(() => {
     if (!data) return;
-    setCancelDialogOpen(true);
-  };
+    setNextTime(data.time);
+  }, [data?.id, data?.time, open]);
 
   if (!data) return null;
 
@@ -235,98 +270,92 @@ export const DetailDrawer = ({
           </Stack>
         </Box>
 
-        {/* 3. 푸터 버튼(발송 대기일 때만 노출) */}
-        {canEditSchedule ? (
-          <Box sx={{ pt: 2 }}>
-            <Divider sx={{ mb: 2 }} />
-            <Stack spacing={1}>
-              <Button
-                fullWidth
-                variant="contained"
-                onClick={handleChangeSchedule}
-                sx={{ bgcolor: amoreTokens.colors.brand.pacificBlue }}
-              >
-                시간 변경
-              </Button>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleCancelSend}
-                sx={{ borderColor: amoreTokens.colors.navy[300], color: amoreTokens.colors.navy[700] }}
-              >
-                발송 취소
-              </Button>
-            </Stack>
-          </Box>
-        ) : null}
+        {/* 3. 액션 */}
+        <Divider sx={{ mt: 3, mb: 2 }} />
+        <Stack direction="row" spacing={1} justifyContent="flex-end">
+          <AppButton
+            variant="secondary-outlined"
+            onClick={() => setCancelOpen(true)}
+            disabled={!canEditSchedule}
+            title={!canEditSchedule ? '발송 예정 상태이며 미래 시간일 때만 취소할 수 있어요.' : undefined}
+          >
+            예약 취소
+          </AppButton>
+          <AppButton
+            variant="primary"
+            onClick={() => setScheduleOpen(true)}
+            disabled={!canEditSchedule}
+            title={!canEditSchedule ? '발송 예정 상태이며 미래 시간일 때만 변경할 수 있어요.' : undefined}
+          >
+            시간 변경
+          </AppButton>
+        </Stack>
 
         <ScheduleChangeModal
-          open={scheduleModalOpen}
+          open={scheduleOpen}
           row={data}
+          onClose={() => setScheduleOpen(false)}
           value={nextTime}
           onChange={setNextTime}
-          onClose={() => setScheduleModalOpen(false)}
-          onConfirm={(payload) => {
-            console.log('[발송 시간 변경]', payload);
-            void (async () => {
-              try {
-                const scheduledAt = dayjs(`${data.date} ${nextTime}`, 'YYYY-MM-DD HH:mm').format('YYYY-MM-DDTHH:mm:00');
-                await updateReservationSchedule(data.id, scheduledAt);
-                const fresh = await getReservationDetail(data.id);
-                const mapped = mapReservationDtoToTableRow(fresh);
-                onReplaceRow?.(mapped);
-                onPatchRow?.(data.id, mapped);
-                onShowToast?.({ severity: 'success', message: '시간을 변경했어요.', detail: `변경 후: ${payload.after}` });
-              } catch (e) {
-                console.error(e);
-                onShowToast?.({ severity: 'error', message: '시간 변경에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
-              }
-            })();
+          onConfirm={async ({ id }) => {
+            if (!data || !nextTime) return;
+            const scheduledAt = dayjs(`${data.date} ${nextTime}`, 'YYYY-MM-DD HH:mm');
+            if (!scheduledAt.isValid()) {
+              onShowToast?.({ severity: 'error', message: '시간 형식이 올바르지 않아요.' });
+              return;
+            }
+
+            try {
+              await updateReservationSchedule(id, scheduledAt.format('YYYY-MM-DDTHH:mm:ss'));
+              onPatchRow?.(id, { time: nextTime });
+              onShowToast?.({ severity: 'success', message: '발송 시간이 변경되었어요.' });
+            } catch (e) {
+              console.error(e);
+              onShowToast?.({ severity: 'error', message: '시간 변경에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+            }
           }}
         />
 
-        {/* 취소 Confirm Modal */}
         <ConfirmModal
-          open={cancelDialogOpen}
-          onClose={() => setCancelDialogOpen(false)}
-          title="발송 취소"
-          tone='danger'
+          open={cancelOpen}
+          onClose={() => {
+            setCancelOpen(false);
+            setCancelReason('');
+          }}
+          title="예약 취소"
+          tone="danger"
           confirmText="취소 확정"
           cancelText="닫기"
           description={
             <>
-              #{data.id} · {data.persona}
+              정말로 이 예약을 취소할까요?
               <br />
-              발송 일시: {`${data.date} ${data.time}`} · 채널 {data.channel ?? '-'} · 대상{' '}
-              {data.recipientCount != null ? `${data.recipientCount.toLocaleString()}명` : '-'}
-              <br />
+              #{data.id} · {data.persona} · {data.date} {data.time}
             </>
           }
           content={
             <TextField
-              label="취소 사유(선택)"
-              placeholder="예: 프로모션 정책 변경"
+              label="취소 사유(옵션)"
+              placeholder="예: 캠페인 변경"
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               fullWidth
+              multiline
+              minRows={2}
             />
           }
-          onConfirm={() => {
-            console.log('[발송 취소]', { id: data.id, reason: cancelReason });
-            void (async () => {
-              try {
-                await cancelReservation(data.id, cancelReason);
-                const fresh = await getReservationDetail(data.id);
-                const mapped = mapReservationDtoToTableRow(fresh);
-                onReplaceRow?.(mapped);
-                onPatchRow?.(data.id, mapped);
-                setCancelDialogOpen(false);
-                onShowToast?.({ severity: 'success', message: '발송을 취소했어요.', detail: `#${data.id} · ${data.persona}` });
-              } catch (e) {
-                console.error(e);
-                onShowToast?.({ severity: 'error', message: '발송 취소에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
-              }
-            })();
+          onConfirm={async () => {
+            if (!data) return;
+            try {
+              await cancelReservation(data.id, cancelReason.trim() ? cancelReason.trim() : undefined);
+              onPatchRow?.(data.id, { status: 'error' });
+              onShowToast?.({ severity: 'success', message: '예약이 취소되었어요.' });
+              setCancelOpen(false);
+              setCancelReason('');
+            } catch (e) {
+              console.error(e);
+              onShowToast?.({ severity: 'error', message: '예약 취소에 실패했어요.', detail: '잠시 후 다시 시도해 주세요.' });
+            }
           }}
         />
       </DrawerWrapper>

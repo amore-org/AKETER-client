@@ -4,7 +4,8 @@ import type { ChipStatus } from '../../common/ui/Chip';
 
 export const statusLabelMap: Record<ChipStatus, string> = {
   success: '발송 완료',
-  error: '발송 취소',
+  // FAILED/CANCELED 등을 한 뱃지로 표현하는 UI 정책(백엔드 세부 사유는 추후 확장)
+  error: '발송 실패/취소',
   info: '발송 예정',
 };
 

@@ -54,12 +54,24 @@ interface DataTableProps {
   onProductClick?: (row: TableRowData) => void;
   onChangeScheduleClick?: (row: TableRowData) => void;
   /**
+   * (server-mode) 날짜 필터가 바뀌었을 때 App이 API 재조회할 수 있도록 알린다.
+   * - 전달하지 않으면 기존처럼 클라이언트 필터로만 동작한다.
+   */
+  onDateFilterChange?: (dateStr: string | null) => void;
+  /**
    * 발송일(날짜) 필터의 초기값.
    * 예: 통합 탭에서 기본값을 '오늘'로 맞추기 위해 사용.
    */
   defaultSelectedDate?: Dayjs | null;
   pageSize?: number;
   variant?: DataTableVariant;
+  /**
+   * (server-mode) 컨트롤드 페이징 지원 (1-based)
+   * - 전달하지 않으면 기존처럼 rows 기반으로 클라이언트 페이징한다.
+   */
+  page?: number;
+  pageCount?: number;
+  onPageChange?: (nextPage: number) => void;
 }
 
 type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'channel';
@@ -110,9 +122,13 @@ export const DataTable = ({
   onPersonaClick,
   onProductClick,
   onChangeScheduleClick,
+  onDateFilterChange,
   defaultSelectedDate,
   pageSize = 10,
   variant = 'today',
+  page: controlledPage,
+  pageCount: controlledPageCount,
+  onPageChange,
 }: DataTableProps) => {
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(() => defaultSelectedDate ?? null);
   const [timeFilter, setTimeFilter] = useState<string>(''); // HH:mm
@@ -121,6 +137,13 @@ export const DataTable = ({
   const [productQuery, setProductQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<'all' | string>('all');
   const [page, setPage] = useState(1);
+
+  const isServerPaging = controlledPageCount != null && Boolean(onPageChange);
+  const activePage = isServerPaging ? (controlledPage ?? 1) : page;
+  const setActivePage = (next: number) => {
+    if (isServerPaging) onPageChange?.(next);
+    else setPage(next);
+  };
 
   const [popover, setPopover] = useState<{
     key: FilterPopoverKey | null;
@@ -134,7 +157,9 @@ export const DataTable = ({
   const closePopover = () => setPopover({ key: null, anchorEl: null });
 
   const filteredRows = useMemo(() => {
-    const dateStr = variant === 'trend' && selectedDate ? selectedDate.format('YYYY-MM-DD') : null;
+    // server-mode에서는 날짜 필터를 API에서 처리하므로, 여기서는 date로 필터링하지 않는다.
+    const dateStr =
+      !onDateFilterChange && variant === 'trend' && selectedDate ? selectedDate.format('YYYY-MM-DD') : null;
     const timeStr = variant === 'today' ? timeFilter.trim() : '';
     const productQ = productQuery.trim().toLowerCase();
 
@@ -151,18 +176,21 @@ export const DataTable = ({
     });
   }, [channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const pageCount = isServerPaging
+    ? Math.max(1, controlledPageCount ?? 1)
+    : Math.max(1, Math.ceil(filteredRows.length / pageSize));
 
-  const safePage = Math.min(page, pageCount);
+  const safePage = Math.min(activePage, pageCount);
 
   const pagedRows = useMemo(() => {
+    if (isServerPaging) return filteredRows;
     const start = (safePage - 1) * pageSize;
     return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, pageSize, safePage]);
+  }, [filteredRows, isServerPaging, pageSize, safePage]);
 
   const handleStatusChange = (e: SelectChangeEvent) => {
     setStatusFilter(e.target.value as 'all' | ChipStatus);
-    setPage(1);
+    setActivePage(1);
   };
 
   const popoverOpen = Boolean(popover.key && popover.anchorEl);
@@ -243,7 +271,8 @@ export const DataTable = ({
                   value={selectedDate}
                   onChange={(v: Dayjs | null) => {
                     setSelectedDate(v);
-                    setPage(1);
+                    setActivePage(1);
+                    onDateFilterChange?.(v ? v.format('YYYY-MM-DD') : null);
                   }}
                   format="YYYY-MM-DD"
                   slotProps={{
@@ -261,7 +290,8 @@ export const DataTable = ({
                   variant="outlined"
                   onClick={() => {
                     setSelectedDate(null);
-                    setPage(1);
+                    setActivePage(1);
+                    onDateFilterChange?.(null);
                   }}
                   disabled={!selectedDate}
                 >
@@ -286,7 +316,7 @@ export const DataTable = ({
                 value={timeFilter}
                 onChange={(e) => {
                   setTimeFilter(e.target.value);
-                  setPage(1);
+                  setActivePage(1);
                 }}
                 fullWidth
                 inputProps={{ step: 300 }}
@@ -298,7 +328,7 @@ export const DataTable = ({
                   variant="outlined"
                   onClick={() => {
                     setTimeFilter('');
-                    setPage(1);
+                    setActivePage(1);
                   }}
                   disabled={!timeFilter}
                 >
@@ -340,7 +370,7 @@ export const DataTable = ({
                   variant="outlined"
                   onClick={() => {
                     setStatusFilter('all');
-                    setPage(1);
+                    setActivePage(1);
                   }}
                   disabled={statusFilter === 'all'}
                 >
@@ -365,7 +395,7 @@ export const DataTable = ({
                 value={personaSelected}
                 onChange={(_e, next) => {
                   setPersonaSelected(next);
-                  setPage(1);
+                  setActivePage(1);
                 }}
                 size="small"
                 renderInput={(params) => <TextField {...params} label="페르소나" placeholder="검색 후 선택" />}
@@ -383,7 +413,7 @@ export const DataTable = ({
                   variant="outlined"
                   onClick={() => {
                     setPersonaSelected([]);
-                    setPage(1);
+                    setActivePage(1);
                   }}
                   disabled={personaSelected.length === 0}
                 >
@@ -409,7 +439,7 @@ export const DataTable = ({
                   label="채널"
                   onChange={(e) => {
                     setChannelFilter(e.target.value as 'all' | string);
-                    setPage(1);
+                    setActivePage(1);
                   }}
                   MenuProps={{ disablePortal: true }}
                 >
@@ -428,7 +458,7 @@ export const DataTable = ({
                   variant="outlined"
                   onClick={() => {
                     setChannelFilter('all');
-                    setPage(1);
+                    setActivePage(1);
                   }}
                   disabled={channelFilter === 'all'}
                 >
@@ -453,7 +483,7 @@ export const DataTable = ({
                 value={productQuery}
                 onChange={(e) => {
                   setProductQuery(e.target.value);
-                  setPage(1);
+                  setActivePage(1);
                 }}
                 fullWidth
               />
@@ -464,7 +494,7 @@ export const DataTable = ({
                   variant="outlined"
                   onClick={() => {
                     setProductQuery('');
-                    setPage(1);
+                    setActivePage(1);
                   }}
                   disabled={!productQuery}
                 >
@@ -714,7 +744,7 @@ export const DataTable = ({
       <Pagination
         count={pageCount}
         page={safePage}
-        onChange={(_event: ChangeEvent<unknown>, value: number) => setPage(value)}
+        onChange={(_event: ChangeEvent<unknown>, value: number) => setActivePage(value)}
       />
     </Box>
   );

@@ -23,8 +23,23 @@ const buildQueryString = (query: HttpRequestOptions['query']): string => {
 };
 
 const getApiBaseUrl = (): string => {
-  // 기본은 same-origin(`/api/...`) 사용. 필요시 VITE_API_BASE_URL 로 오버라이드.
-  const envBase = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL;
+  /**
+   * 기본은 same-origin(`/api/...`) 사용.
+   *
+   * 로컬 개발에서 `VITE_API_PROXY_TARGET`(vite.config.ts proxy) 를 쓰는 경우
+   * baseURL을 비워야 브라우저 CORS를 피하고 dev proxy를 탈 수 있다.
+   *
+   * - dev + proxyTarget 설정: '' (same-origin)
+   * - 그 외(예: 배포): VITE_API_BASE_URL 사용 가능
+   */
+  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env ?? {};
+  const proxyTarget = typeof env.VITE_API_PROXY_TARGET === 'string' ? env.VITE_API_PROXY_TARGET : undefined;
+  const envBase = typeof env.VITE_API_BASE_URL === 'string' ? env.VITE_API_BASE_URL : undefined;
+  const isDev = Boolean((env as { DEV?: boolean }).DEV);
+
+  // dev에서는 CORS 회피를 위해 기본적으로 same-origin(`/api`)을 사용하고,
+  // vite proxy(vite.config.ts)가 백엔드로 전달하도록 한다.
+  if (isDev) return '';
   return envBase ?? '';
 };
 
