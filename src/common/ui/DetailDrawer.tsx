@@ -75,7 +75,6 @@ export const DetailDrawer = ({
   onProductClick,
   onShowToast,
   onPatchRow,
-  onReplaceRow,
   initialDialog = null,
 }: DetailDrawerProps) => {
   const statusLabel = useMemo(() => {
