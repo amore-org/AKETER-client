@@ -1,6 +1,6 @@
 // src/common/ui/DetailDrawer.tsx
 import dayjs from 'dayjs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { 
   Drawer,
@@ -87,6 +87,7 @@ export const DetailDrawer = ({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [nextTime, setNextTime] = useState('');
+  const fetchedDetailIdsRef = useRef<Set<number>>(new Set());
 
   const canEditSchedule = useMemo(() => {
     if (!data) return false;
@@ -99,7 +100,18 @@ export const DetailDrawer = ({
   // 드로어가 열렸을 때(또는 row가 바뀔 때) 상세 조회로 추천이유 등 보강
   useEffect(() => {
     if (!open || !data) return;
-    if (data.recommendedReason) return; // 이미 있으면 재조회 생략
+    // id 누락 시 /api/reservations/undefined 같은 잘못된 호출을 막는다.
+    if (!Number.isFinite(data.id) || data.id <= 0) {
+      onShowToast?.({
+        severity: 'warning',
+        message: '상세 정보를 불러올 수 없어요.',
+        detail: '예약 ID가 올바르지 않아요.',
+      });
+      return;
+    }
+    // 동일 id에 대해 상세 조회는 1회만 수행(추천 이유가 null/undefined인 케이스에서도 무한 재시도 방지)
+    if (fetchedDetailIdsRef.current.has(data.id)) return;
+    if (data.recommendedReason != null) return; // 이미 값이 있으면 재조회 생략 (null/undefined만 재조회 대상)
 
     let cancelled = false;
     void (async () => {
@@ -116,6 +128,9 @@ export const DetailDrawer = ({
           message: '상세 정보를 일부 불러오지 못했어요.',
           detail: '추천 이유 등 일부 항목이 누락될 수 있어요.',
         });
+      } finally {
+        // 성공/실패와 관계없이 1회 호출로 마킹(필요 시 사용자가 드로어를 닫았다가 다시 열면 재시도 가능)
+        fetchedDetailIdsRef.current.add(data.id);
       }
     })();
 
@@ -136,7 +151,7 @@ export const DetailDrawer = ({
   useEffect(() => {
     if (!data) return;
     setNextTime(data.time);
-  }, [data?.id, data?.time, open]);
+  }, [data, open]);
 
   if (!data) return null;
 

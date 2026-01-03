@@ -156,6 +156,15 @@ export const DataTable = ({
 
   const closePopover = () => setPopover({ key: null, anchorEl: null });
 
+  const splitBrandProduct = (product: string): { brand: string; name: string } => {
+    const p = (product ?? '').trim();
+    if (!p) return { brand: '-', name: '-' };
+    const [brand, ...rest] = p.split(/\s+/);
+    if (!brand) return { brand: '-', name: p };
+    if (rest.length === 0) return { brand: '-', name: p };
+    return { brand, name: rest.join(' ') };
+  };
+
   const filteredRows = useMemo(() => {
     // server-mode에서는 날짜 필터를 API에서 처리하므로, 여기서는 date로 필터링하지 않는다.
     const dateStr =
@@ -176,17 +185,58 @@ export const DataTable = ({
     });
   }, [channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
 
+  const toTimeValue = (r: TableRowData): number => {
+    const t = dayjs(`${r.date} ${r.time}`, 'YYYY-MM-DD HH:mm');
+    return t.isValid() ? t.valueOf() : 0;
+  };
+
+  const groupedRows = useMemo(() => {
+    if (variant !== 'trend') return null;
+
+    const byPersona = new Map<string, TableRowData[]>();
+    filteredRows.forEach((r) => {
+      const key = r.personaId ?? r.persona;
+      const arr = byPersona.get(key) ?? [];
+      arr.push(r);
+      byPersona.set(key, arr);
+    });
+
+    const groups = Array.from(byPersona.entries()).map(([personaKey, items]) => {
+      const sorted = items.slice().sort((a, b) => toTimeValue(b) - toTimeValue(a));
+      return {
+        personaKey,
+        // 서버가 내려준 row(상품:메시지 1개 = 1 row)를 개수 제한 없이 그대로 쌓아서 보여준다.
+        items: sorted,
+        latestAt: toTimeValue(sorted[0] ?? items[0]),
+      };
+    });
+
+    groups.sort((a, b) => (b.latestAt ?? 0) - (a.latestAt ?? 0));
+    return groups;
+  }, [filteredRows, variant]);
+
+  const groupCount = groupedRows ? groupedRows.length : 0;
+
   const pageCount = isServerPaging
     ? Math.max(1, controlledPageCount ?? 1)
-    : Math.max(1, Math.ceil(filteredRows.length / pageSize));
+    : Math.max(1, Math.ceil((groupedRows ? groupCount : filteredRows.length) / pageSize));
 
   const safePage = Math.min(activePage, pageCount);
 
+  const pagedGroups = useMemo(() => {
+    if (!groupedRows) return null;
+    // server paging이면 rows가 이미 server에서 잘린 것으로 보고, 여기서 추가 slice는 하지 않는다.
+    if (isServerPaging) return groupedRows;
+    const start = (safePage - 1) * pageSize;
+    return groupedRows.slice(start, start + pageSize);
+  }, [groupedRows, isServerPaging, pageSize, safePage]);
+
   const pagedRows = useMemo(() => {
     if (isServerPaging) return filteredRows;
+    if (groupedRows) return [];
     const start = (safePage - 1) * pageSize;
     return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, isServerPaging, pageSize, safePage]);
+  }, [filteredRows, groupedRows, isServerPaging, pageSize, safePage]);
 
   const handleStatusChange = (e: SelectChangeEvent) => {
     setStatusFilter(e.target.value as 'all' | ChipStatus);
@@ -196,8 +246,8 @@ export const DataTable = ({
   const popoverOpen = Boolean(popover.key && popover.anchorEl);
   const popoverId = popoverOpen && popover.key ? `datatable-filter-${popover.key}` : undefined;
 
-  // 컬럼 수: 페르소나, 상품명, 채널, 메시지, 발송시간/일시, 상태
-  const emptyColSpan = 6;
+  // 컬럼 수: 페르소나, 브랜드, 상품명, 채널, 메시지, 발송시간/일시, 상태
+  const emptyColSpan = 7;
 
   const headerIconButtonSx = {
     p: 0.25,
@@ -533,6 +583,11 @@ export const DataTable = ({
             </StyledTh>
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">브랜드</Box>
+              </Stack>
+            </StyledTh>
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">상품명</Box>
                 <Tooltip title="상품명 필터">
                   <IconButton
@@ -622,7 +677,123 @@ export const DataTable = ({
           </TableRow>
         </TableHead>
         <TableBody>
-          {pagedRows.length > 0 ? (
+          {pagedGroups && pagedGroups.length > 0 ? (
+            pagedGroups.flatMap((g) =>
+              g.items.map((row, idx) => {
+                const bp = splitBrandProduct(row.product);
+                return (
+                  <StyledRow
+                    key={`${g.personaKey}-${row.id}`}
+                    hover
+                    $clickable={Boolean(onRowClick)}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  >
+                    {idx === 0 && (
+                      <StyledTd sx={{ minWidth: '12rem', fontWeight: 600 }} rowSpan={g.items.length}>
+                        {onPersonaClick ? (
+                          <Tooltip title="페르소나 상세로 이동해요.">
+                            <span>
+                              <AppButton
+                                variant="link"
+                                linkKind="internal"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onPersonaClick(row);
+                                }}
+                                aria-label="페르소나 상세 보기"
+                              >
+                                {row.persona}
+                              </AppButton>
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          row.persona
+                        )}
+                      </StyledTd>
+                    )}
+                    <StyledTd sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{bp.brand}</StyledTd>
+                    <StyledTd sx={{ minWidth: '10rem' }}>
+                      {onProductClick ? (
+                        <Tooltip title="아모레몰 상품 상세로 이동해요.">
+                          <span>
+                            <AppButton
+                              variant="link"
+                              linkKind="external"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onProductClick(row);
+                              }}
+                              aria-label="상품 상세 보기"
+                            >
+                              {bp.name}
+                            </AppButton>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        bp.name
+                      )}
+                    </StyledTd>
+                    <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                      {row.channel ? (
+                        <AppChip
+                          size="small"
+                          variant="outlined"
+                          tone="neutral"
+                          label={formatChannelLabel(row.channel)}
+                          sx={channelBadgeSx}
+                        />
+                      ) : (
+                        '-'
+                      )}
+                    </StyledTd>
+                    <StyledTd sx={{ maxWidth: '26rem' }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
+                          {row.title}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: amoreTokens.colors.gray[600],
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {truncateText(row.description, 60)}
+                        </Typography>
+                      </Box>
+                    </StyledTd>
+                    <StyledTd sx={{ whiteSpace: 'nowrap' }}>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <Box component="span">{variant === 'today' ? row.time : `${row.date} ${row.time}`}</Box>
+                        {canShowChangeScheduleIcon(row) && (
+                          <Tooltip title="시간 변경">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onChangeScheduleClick?.(row);
+                              }}
+                              sx={{ ...headerIconButtonSx, color: amoreTokens.colors.gray[500] }}
+                            >
+                              <EditOutlinedIcon fontSize="inherit" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Stack>
+                    </StyledTd>
+                    <StyledTd align="center">
+                      <StatusChip label={statusLabelMap[row.status]} status={row.status} />
+                    </StyledTd>
+                  </StyledRow>
+                );
+              }),
+            )
+          ) : pagedRows.length > 0 ? (
             pagedRows.map((row) => (
               <StyledRow
                 key={row.id}
@@ -630,6 +801,10 @@ export const DataTable = ({
                 $clickable={Boolean(onRowClick)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
+                {(() => {
+                  const bp = splitBrandProduct(row.product);
+                  return (
+                    <>
                 <StyledTd sx={{ minWidth: '12rem', fontWeight: 600 }}>
                   {onPersonaClick ? (
                     <Tooltip title="페르소나 상세로 이동해요.">
@@ -651,6 +826,7 @@ export const DataTable = ({
                     row.persona
                   )}
                 </StyledTd>
+                <StyledTd sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{bp.brand}</StyledTd>
                 <StyledTd sx={{ minWidth: '10rem' }}>
                   {onProductClick ? (
                     <Tooltip title="아모레몰 상품 상세로 이동해요.">
@@ -664,14 +840,17 @@ export const DataTable = ({
                           }}
                           aria-label="상품 상세 보기"
                         >
-                          {row.product}
+                          {bp.name}
                         </AppButton>
                       </span>
                     </Tooltip>
                   ) : (
-                    row.product
+                    bp.name
                   )}
                 </StyledTd>
+                    </>
+                  );
+                })()}
                 <StyledTd sx={{ whiteSpace: 'nowrap' }}>
                   {row.channel ? (
                     <AppChip

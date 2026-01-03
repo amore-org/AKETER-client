@@ -24,7 +24,6 @@ export type ReservationStatusServer =
 export type ChannelTypeServer = string;
 
 export interface ReservationRowServer {
-  id: number;
   personaId: number;
   personaName: string;
   scheduledAt: string; // "2025-12-30T09:00:00"
@@ -35,7 +34,8 @@ export interface ReservationRowServer {
   itemKey: string;
   itemName: string;
   brandName?: string;
-  messageId: number;
+  /** 메시지 발송 예약 ID(= 상세 조회 path param으로 사용하는 값) */
+  messageReservationId: number;
   messageTitle: string;
   messageDescription: string;
 }
@@ -64,6 +64,7 @@ export interface ReservationDetailServer {
     id: number;
     itemKey: string;
     name: string;
+    brandName?: string;
   };
   message: {
     id: number;
@@ -91,6 +92,7 @@ export interface ReservationItemDto {
   itemId: number;
   itemKey: string;
   name: string;
+  brandName?: string;
 }
 
 export interface ReservationSummaryDto {
@@ -154,7 +156,8 @@ const buildProductUrl = (itemId?: number): string | undefined => {
 };
 
 export const mapReservationRowServerToDto = (row: ReservationRowServer): ReservationSummaryDto => ({
-  reservationId: row.id,
+  // 상세 조회 path param으로 쓰는 값 = messageReservationId
+  reservationId: row.messageReservationId,
   personaId: row.personaId,
   personaName: row.personaName,
   scheduledAt: row.scheduledAt,
@@ -165,9 +168,11 @@ export const mapReservationRowServerToDto = (row: ReservationRowServer): Reserva
     itemId: row.itemId,
     itemKey: row.itemKey,
     name: row.itemName,
+    brandName: row.brandName,
   },
   message: {
-    messageId: row.messageId,
+    // 목록 DTO에는 message(id)가 없으므로, 미사용 필드지만 안정적으로 채운다.
+    messageId: row.messageReservationId,
     title: row.messageTitle,
     description: row.messageDescription,
   },
@@ -185,6 +190,7 @@ export const mapDetailServerToDto = (d: ReservationDetailServer): ReservationDet
     itemId: d.item.id,
     itemKey: d.item.itemKey,
     name: d.item.name,
+    brandName: d.item.brandName,
   },
   message: {
     messageId: d.message.id,
@@ -202,6 +208,9 @@ export const mapReservationDtoToTableRow = (dto: ReservationSummaryDto | Reserva
   const dt = dayjs(dto.scheduledAt);
   const date = dt.isValid() ? dt.format('YYYY-MM-DD') : '';
   const time = dt.isValid() ? dt.format('HH:mm') : '';
+  const brand = dto.item?.brandName?.trim();
+  const name = dto.item?.name?.trim();
+  const product = brand ? `${brand} ${name ?? ''}`.trim() : (name ?? '-');
 
   return {
     id: dto.reservationId,
@@ -209,7 +218,7 @@ export const mapReservationDtoToTableRow = (dto: ReservationSummaryDto | Reserva
     personaId: String(dto.personaId),
     date,
     time,
-    product: dto.item?.name ?? '-',
+    product,
     productUrl: buildProductUrl(dto.item?.itemId),
     title: dto.message?.title ?? '',
     description: dto.message?.description ?? '',

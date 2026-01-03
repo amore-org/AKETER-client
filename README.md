@@ -11,7 +11,7 @@ CRM 메시지 자동 제작을 위한 AI Agent 클라이언트 애플리케이�
 Vite 개발 서버에서 `/api` 호출을 백엔드로 프록시하려면 아래 환경변수 중 하나를 설정하세요.
 
 - `VITE_API_PROXY_TARGET`: (권장) 예) `http://localhost:8080`
-- `VITE_API_BASE_URL`: 프론트의 baseURL 오버라이드 용도이며, dev에서는 proxy target으로도 사용됩니다.
+- `VITE_API_BASE_URL`: proxy를 쓰지 않을 때 프론트가 직접 호출할 백엔드 base URL (CORS는 백엔드 설정 필요)
 
 예시:
 
@@ -19,6 +19,15 @@ Vite 개발 서버에서 `/api` 호출을 백엔드로 프록시하려면 아래
 export VITE_API_PROXY_TARGET="http://localhost:8080"
 npm run dev
 ```
+
+### (선택) 공통 헤더 주입(예: 아이디/토큰)
+
+- 단일 헤더:
+  - `VITE_API_HEADER_NAME`, `VITE_API_HEADER_VALUE`
+  - 예: `VITE_API_HEADER_NAME=X-User-Id`, `VITE_API_HEADER_VALUE=123`
+- 복수 헤더(JSON):
+  - `VITE_API_HEADERS_JSON`
+  - 예: `VITE_API_HEADERS_JSON={"X-User-Id":"123","Authorization":"Bearer ..."}`
 
 ### asdf 사용 시
 
