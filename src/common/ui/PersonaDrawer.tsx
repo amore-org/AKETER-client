@@ -11,6 +11,7 @@ import { Button as AppButton } from './Button';
 import { DetailDrawer } from './DetailDrawer';
 import type { TableRowData } from './DataTable';
 import { formatKoreanLevelLabel, personaLevelChipSx } from './personaLevel';
+import { getReservationDetail, mapReservationDtoToTableRow } from '../../api/reservations';
 
 const DrawerWrapper = styled(Box)`
   width: 30rem;
@@ -65,8 +66,10 @@ export const PersonaDrawer = ({ open, onClose, data, onOpenHistory }: PersonaDra
   const canOpenHistory = Boolean(onOpenHistory);
   void canOpenHistory;
 
-  const openSendDetail = (send: NonNullable<PersonaProfile['recentSends']>[number]) => {
+  const openSendDetail = async (send: NonNullable<PersonaProfile['recentSends']>[number]) => {
     if (!data) return;
+
+    // 먼저 기본값으로 드로어 열기
     setSelectedSend({
       id: send.id,
       persona: data.persona,
@@ -76,10 +79,18 @@ export const PersonaDrawer = ({ open, onClose, data, onOpenHistory }: PersonaDra
       product: send.product,
       title: send.title,
       status: send.status,
-      // PersonaDrawer의 recentSends에는 description이 없으므로 placeholder로 제공
       description: '',
     });
     setDetailOpen(true);
+
+    // API 호출로 상세 정보(추천 이유 등) 가져오기
+    try {
+      const detail = await getReservationDetail(send.id);
+      const row = mapReservationDtoToTableRow(detail);
+      setSelectedSend(row);
+    } catch (e) {
+      console.error('발송 상세 조회 실패:', e);
+    }
   };
 
   return (

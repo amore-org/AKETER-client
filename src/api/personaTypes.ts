@@ -1,6 +1,8 @@
 // src/api/personaTypes.ts
 // docs/API.md 기반: "페르소나 유형 목록 조회" API
 
+import dayjs from 'dayjs';
+import type { ChipStatus } from '../common/ui/Chip';
 import type { PersonaProfile } from './types';
 import { requestJson } from './http';
 
@@ -16,6 +18,16 @@ export interface SpringPageServer<T> {
   sort?: unknown;
 }
 
+export interface MessageHistoryServer {
+  messageReservationId: number;
+  messageTitle: string;
+  messageDescription: string;
+  scheduledAt: string;
+  brandName?: string;
+  itemName: string;
+  status: string;
+}
+
 export interface PersonaTypeRowServer {
   personaId: number;
   personaName: string;
@@ -28,6 +40,7 @@ export interface PersonaTypeRowServer {
   benefitSensitivity?: string;
   trendKeywords?: string[];
   coreKeywords?: string[];
+  messageHistory?: MessageHistoryServer[];
 }
 
 export interface PageDto<T> {
@@ -112,20 +125,50 @@ const mapBenefitSensitivityToKoreanLevelToken = (raw?: string): string | undefin
   return mapLevelEnumToKoreanLevelToken(v);
 };
 
-export const mapPersonaTypeServerToProfile = (row: PersonaTypeRowServer): PersonaProfile => ({
-  personaId: String(row.personaId),
-  persona: row.personaName,
-  memberCount: row.memberCount,
-  ageGroup: mapAgeBandToKorean(row.ageBand),
-  mainCategory: row.primaryCategory,
-  purchaseMethod: mapPurchaseStyleToKorean(row.purchaseStyle),
-  brandLoyalty: mapBrandLoyaltyToKoreanLevelToken(row.brandLoyalty),
-  priceSensitivity: mapLevelEnumToKoreanLevelToken(row.priceSensitivity),
-  benefitSensitivity: mapBenefitSensitivityToKoreanLevelToken(row.benefitSensitivity),
-  trendKeywords: row.trendKeywords ?? [],
-  coreKeywords: row.coreKeywords ?? [],
-  recentSends: [],
-});
+const mapStatusToChipStatus = (status: string): ChipStatus => {
+  switch (status) {
+    case 'READY':
+    case 'PENDING':
+      return 'info';
+    case 'SENT':
+    case 'COMPLETED':
+      return 'success';
+    case 'CANCELED':
+    case 'FAILED':
+      return 'error';
+    default:
+      return 'info';
+  }
+};
+
+export const mapPersonaTypeServerToProfile = (row: PersonaTypeRowServer): PersonaProfile => {
+  const recentSends = (row.messageHistory ?? []).map((msg) => {
+    const dt = dayjs(msg.scheduledAt);
+    return {
+      id: msg.messageReservationId,
+      date: dt.isValid() ? dt.format('YYYY-MM-DD') : '',
+      time: dt.isValid() ? dt.format('HH:mm') : '',
+      product: msg.itemName,
+      title: msg.messageTitle,
+      status: mapStatusToChipStatus(msg.status),
+    };
+  });
+
+  return {
+    personaId: String(row.personaId),
+    persona: row.personaName,
+    memberCount: row.memberCount,
+    ageGroup: mapAgeBandToKorean(row.ageBand),
+    mainCategory: row.primaryCategory,
+    purchaseMethod: mapPurchaseStyleToKorean(row.purchaseStyle),
+    brandLoyalty: mapBrandLoyaltyToKoreanLevelToken(row.brandLoyalty),
+    priceSensitivity: mapLevelEnumToKoreanLevelToken(row.priceSensitivity),
+    benefitSensitivity: mapBenefitSensitivityToKoreanLevelToken(row.benefitSensitivity),
+    trendKeywords: row.trendKeywords ?? [],
+    coreKeywords: row.coreKeywords ?? [],
+    recentSends,
+  };
+};
 
 export interface GetPersonaTypesParams {
   page?: number; // 0-based
