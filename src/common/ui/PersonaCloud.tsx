@@ -1,6 +1,7 @@
 // src/common/ui/PersonaCloud.tsx
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { Wordcloud } from '@visx/wordcloud';
 import styled from 'styled-components';
 import { amoreTokens } from '../../styles/theme';
@@ -43,6 +44,42 @@ const CloudWrap = styled(Box)`
   overflow: hidden;
   background: ${amoreTokens.colors.common.white};
   padding: 0;
+`;
+
+const RankCard = styled(Box)<{ $isTop?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: ${amoreTokens.spacing(1.5)};
+  padding: ${amoreTokens.spacing(1.5)} ${amoreTokens.spacing(2)};
+  border-radius: ${amoreTokens.radius.base};
+  background: ${({ $isTop }) => ($isTop ? amoreTokens.colors.navy[50] : amoreTokens.colors.common.white)};
+  border: 1px solid ${({ $isTop }) => ($isTop ? amoreTokens.colors.brand.pacificBlue : amoreTokens.colors.gray[200])};
+  cursor: pointer;
+  transition: all 150ms ease;
+
+  &:hover {
+    border-color: ${amoreTokens.colors.brand.pacificBlue};
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+`;
+
+const RankBadge = styled(Box)<{ $rank: number }>`
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: ${amoreTokens.typography.size.caption};
+  font-weight: ${amoreTokens.typography.weight.bold};
+  flex-shrink: 0;
+  background: ${({ $rank }) => {
+    if ($rank === 1) return amoreTokens.colors.brand.pacificBlue;
+    if ($rank === 2) return amoreTokens.colors.navy[200];
+    if ($rank === 3) return amoreTokens.colors.navy[100];
+    return amoreTokens.colors.gray[100];
+  }};
+  color: ${({ $rank }) => ($rank <= 2 ? amoreTokens.colors.common.white : amoreTokens.colors.gray[700])};
 `;
 
 const seededRandom = (seed: number) => {
@@ -170,7 +207,7 @@ const fitTextInCircle = (text: string, radius: number) => {
 };
 
 const resolveCircleCollisions = (nodes: PositionedBubble[], bounds: { halfW: number; halfH: number }) => {
-  // n이 작다는 전제(페르소나 수)에서 O(n^2) 반복 완화로 “절대 겹치지 않게” 보정한다.
+  // n이 작다는 전제(페르소나 수)에서 O(n^2) 반복 완화로 "절대 겹치지 않게" 보정한다.
   const { halfW, halfH } = bounds;
   const gap = 3; // 원 사이 최소 간격(겹침 방지 우선)
   const iterations = 90;
@@ -206,10 +243,35 @@ const resolveCircleCollisions = (nodes: PositionedBubble[], bounds: { halfW: num
 
     if (!moved) break;
   }
+
+  // 모든 노드의 중심(centroid)을 계산하여 SVG 중앙(0, 0)으로 이동
+  if (nodes.length > 0) {
+    let sumX = 0;
+    let sumY = 0;
+    for (const n of nodes) {
+      sumX += n.x;
+      sumY += n.y;
+    }
+    const centroidX = sumX / nodes.length;
+    const centroidY = sumY / nodes.length;
+
+    // 중심이 (0, 0)이 되도록 전체 노드 이동
+    for (const n of nodes) {
+      n.x -= centroidX;
+      n.y -= centroidY;
+    }
+
+    // 이동 후 bounds를 벗어나지 않도록 다시 clamp
+    for (const n of nodes) {
+      n.x = clamp(n.x, -halfW + n.collisionRadius, halfW - n.collisionRadius);
+      n.y = clamp(n.y, -halfH + n.collisionRadius, halfH - n.collisionRadius);
+    }
+  }
 };
 
 export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
   const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
+  const [expandedRankId, setExpandedRankId] = useState<string | null>(null);
   const nodesRef = useRef<PositionedBubble[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -249,6 +311,19 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
       for (let i = 0; i < key.length; i += 1) s = ((s * 31) ^ key.charCodeAt(i)) >>> 0;
     }
     return s || 1;
+  }, [items]);
+
+  // Top 5 페르소나 순위
+  const top5 = useMemo(() => {
+    const sorted = items.slice().sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
+    return sorted.slice(0, 5).map((item, idx) => ({
+      rank: idx + 1,
+      personaId: item.personaId,
+      label: item.label,
+      count: item.count ?? 0,
+      ratio: item.ratio ?? 0,
+      isTop: item.isTop,
+    }));
   }, [items]);
 
   useLayoutEffect(() => {
@@ -624,8 +699,112 @@ export const PersonaCloud = ({ items, onSelect }: PersonaCloudProps) => {
         </Box>
       )}
 
-      <Box sx={{ width: '100%', height: 720, padding: amoreTokens.spacing(3) }}>
-        <Box ref={containerRef} sx={{ width: '100%', height: '100%' }}>
+      <Box sx={{ display: 'flex', width: '100%', height: 640, padding: amoreTokens.spacing(3), gap: amoreTokens.spacing(3) }}>
+        {/* 왼쪽: Top 5 순위 카드 */}
+        <Box
+          sx={{
+            width: '25rem',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: amoreTokens.spacing(1),
+            height: '100%',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: amoreTokens.colors.gray[600],
+              fontWeight: amoreTokens.typography.weight.bold,
+              mb: 0.5,
+            }}
+          >
+            TOP 5 페르소나
+          </Typography>
+          {top5.map((item) => {
+            const isExpanded = expandedRankId === item.personaId;
+            return (
+              <RankCard
+                key={item.personaId}
+                $isTop={item.rank === 1}
+                onClick={() => setExpandedRankId(isExpanded ? null : item.personaId)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setExpandedRankId(isExpanded ? null : item.personaId);
+                  }
+                }}
+                sx={{
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  transition: 'all 200ms ease',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: amoreTokens.spacing(1.5), minWidth: 0 }}>
+                    <RankBadge $rank={item.rank}>{item.rank}</RankBadge>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: item.rank === 1 ? amoreTokens.typography.weight.bold : amoreTokens.typography.weight.medium,
+                        color: amoreTokens.colors.gray[900],
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.label}
+                    </Typography>
+                  </Box>
+                  <KeyboardArrowDownIcon
+                    sx={{
+                      color: amoreTokens.colors.gray[400],
+                      fontSize: '1.25rem',
+                      flexShrink: 0,
+                      transition: 'transform 200ms ease',
+                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                  />
+                </Box>
+                {isExpanded && (
+                  <Box
+                    sx={{
+                      mt: 1.5,
+                      pt: 1.5,
+                      width: '100%',
+                      borderTop: `1px solid ${amoreTokens.colors.gray[200]}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.75,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[500] }}>
+                        소속 인원 수
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: amoreTokens.typography.weight.semibold, color: amoreTokens.colors.gray[800] }}>
+                        {item.count.toLocaleString()}명
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[500] }}>
+                        비율
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: amoreTokens.typography.weight.semibold, color: amoreTokens.colors.brand.pacificBlue }}>
+                        {Math.round(item.ratio * 100)}%
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              </RankCard>
+            );
+          })}
+        </Box>
+
+        {/* 오른쪽: 버블 시각화 */}
+        <Box ref={containerRef} sx={{ flex: 1, height: '100%', minWidth: 0 }}>
           {!items.length ? (
             <Box
               sx={{

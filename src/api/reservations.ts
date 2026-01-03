@@ -25,6 +25,7 @@ export type ChannelTypeServer = string;
 
 export interface ReservationRowServer {
   id: number;
+  messageReservationId: number;
   personaId: number;
   personaName: string;
   scheduledAt: string; // "2025-12-30T09:00:00"
@@ -54,6 +55,7 @@ export interface SpringPageServer<T> {
 
 export interface ReservationDetailServer {
   id: number;
+  messageReservationId: number;
   personaId: number;
   personaName: string;
   scheduledAt: string;
@@ -95,6 +97,7 @@ export interface ReservationItemDto {
 
 export interface ReservationSummaryDto {
   reservationId: number;
+  messageReservationId: number;
   personaId: number;
   personaName: string;
   scheduledAt: string;
@@ -155,6 +158,7 @@ const buildProductUrl = (itemId?: number): string | undefined => {
 
 export const mapReservationRowServerToDto = (row: ReservationRowServer): ReservationSummaryDto => ({
   reservationId: row.id,
+  messageReservationId: row.messageReservationId,
   personaId: row.personaId,
   personaName: row.personaName,
   scheduledAt: row.scheduledAt,
@@ -175,6 +179,7 @@ export const mapReservationRowServerToDto = (row: ReservationRowServer): Reserva
 
 export const mapDetailServerToDto = (d: ReservationDetailServer): ReservationDetailDto => ({
   reservationId: d.id,
+  messageReservationId: d.messageReservationId,
   personaId: d.personaId,
   personaName: d.personaName,
   scheduledAt: d.scheduledAt,
@@ -205,6 +210,7 @@ export const mapReservationDtoToTableRow = (dto: ReservationSummaryDto | Reserva
 
   return {
     id: dto.reservationId,
+    messageReservationId: dto.messageReservationId,
     persona: dto.personaName,
     personaId: String(dto.personaId),
     date,

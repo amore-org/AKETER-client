@@ -1,6 +1,6 @@
 // src/common/ui/DetailDrawer.tsx
 import dayjs from 'dayjs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { 
   Drawer,
@@ -75,7 +75,6 @@ export const DetailDrawer = ({
   onProductClick,
   onShowToast,
   onPatchRow,
-  onReplaceRow,
   initialDialog = null,
 }: DetailDrawerProps) => {
   const statusLabel = useMemo(() => {
@@ -87,6 +86,7 @@ export const DetailDrawer = ({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [nextTime, setNextTime] = useState('');
+  const [detailData, setDetailData] = useState<TableRowData | null>(null);
 
   const canEditSchedule = useMemo(() => {
     if (!data) return false;
@@ -96,18 +96,25 @@ export const DetailDrawer = ({
     return scheduledAt.isAfter(dayjs());
   }, [data]);
 
+  // 이미 상세 조회한 ID를 추적하여 무한 호출 방지
+  const fetchedIdRef = useRef<number | null>(null);
+
   // 드로어가 열렸을 때(또는 row가 바뀔 때) 상세 조회로 추천이유 등 보강
   useEffect(() => {
     if (!open || !data) return;
+    if (data.messageReservationId == null) return; // id가 없으면 API 호출 생략
     if (data.recommendedReason) return; // 이미 있으면 재조회 생략
+    if (fetchedIdRef.current === data.messageReservationId) return; // 이미 조회한 ID면 생략
+
+    fetchedIdRef.current = data.messageReservationId;
 
     let cancelled = false;
     void (async () => {
       try {
-        const detail = await getReservationDetail(data.id);
+        const detail = await getReservationDetail(data.messageReservationId!);
         if (cancelled) return;
         const row = mapReservationDtoToTableRow(detail);
-        onReplaceRow?.(row);
+        setDetailData(row);
       } catch (e) {
         // 상세 조회 실패는 치명적이지 않으므로 조용히 토스트만
         console.error(e);
@@ -122,7 +129,14 @@ export const DetailDrawer = ({
     return () => {
       cancelled = true;
     };
-  }, [data, onReplaceRow, onShowToast, open]);
+  }, [data, onShowToast, open]);
+
+  useEffect(() => {
+    if (!open) {
+      fetchedIdRef.current = null;
+      setDetailData(null);
+    }
+  }, [open]);
 
   // initialDialog 처리(렌더 시점 초기값)
   useEffect(() => {
@@ -139,6 +153,9 @@ export const DetailDrawer = ({
   }, [data?.id, data?.time, open]);
 
   if (!data) return null;
+
+  // 상세 조회 결과가 있으면 사용, 없으면 원본 data 사용
+  const displayData = detailData ?? data;
 
   return (
     <Drawer 
@@ -160,20 +177,20 @@ export const DetailDrawer = ({
             <Stack direction="row" spacing={1} alignItems="center">
               <Typography variant="h3">발송 상세 정보</Typography>
               <Typography variant="caption" sx={{ color: amoreTokens.colors.gray[600], fontWeight: 700 }}>
-                #{data.id}
+                #{displayData.id}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-            {data.channel ? (
-                  <AppChip size="small" variant="outlined" tone="neutral" label={data.channel} sx={channelBadgeSx} />
+            {displayData.channel ? (
+                  <AppChip size="small" variant="outlined" tone="neutral" label={displayData.channel} sx={channelBadgeSx} />
                 ) : (
                   <Typography variant="body2">-</Typography>
                 )}
-              <StatusChip status={data.status} label={statusLabel} />
-                
+              <StatusChip status={displayData.status} label={statusLabel} />
+
 
                 <Typography variant="body2">
-                  {data.recipientCount != null ? `${data.recipientCount.toLocaleString()}명` : '-'}
+                  {displayData.recipientCount != null ? `${displayData.recipientCount.toLocaleString()}명` : '-'}
                 </Typography>
             </Stack>
           </Stack>
@@ -190,7 +207,7 @@ export const DetailDrawer = ({
           <Stack spacing={2}>
             <InfoRow>
               <InfoLabel>발송 일시</InfoLabel>
-              <Typography variant="body2">{`${data.date} ${data.time}`}</Typography>
+              <Typography variant="body2">{`${displayData.date} ${displayData.time}`}</Typography>
             </InfoRow>
             <InfoRow>
               <InfoLabel>타겟 페르소나</InfoLabel>
@@ -202,18 +219,18 @@ export const DetailDrawer = ({
                         variant="link"
                         linkKind="internal"
                         onClick={() => {
-                          onPersonaClick(data);
+                          onPersonaClick(displayData);
                           // 드로어가 겹치지 않게 현재(발송 상세) 드로어는 닫는다.
                           onClose();
                         }}
                       >
-                        {data.persona}
+                        {displayData.persona}
                       </AppButton>
                     </span>
                   </Tooltip>
                 ) : (
                   <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                    {data.persona}
+                    {displayData.persona}
                   </Typography>
                 )}
               </Box>
@@ -228,14 +245,14 @@ export const DetailDrawer = ({
                       <AppButton
                         variant="link"
                         linkKind="external"
-                        onClick={() => onProductClick(data)}
+                        onClick={() => onProductClick(displayData)}
                       >
-                        {data.product}
+                        {displayData.product}
                       </AppButton>
                     </span>
                   </Tooltip>
                 ) : (
-                  <Typography variant="body2">{data.product}</Typography>
+                  <Typography variant="body2">{displayData.product}</Typography>
                 )}
               </Box>
             </InfoRow>
@@ -243,7 +260,7 @@ export const DetailDrawer = ({
             <InfoRow>
               <InfoLabel>추천 이유</InfoLabel>
               <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[800] }}>
-                {data.recommendedReason ?? '-'}
+                {displayData.recommendedReason ?? '-'}
               </Typography>
             </InfoRow>
 
@@ -254,7 +271,7 @@ export const DetailDrawer = ({
                     Title
                   </Typography>
                   <Typography variant="body2" sx={{ lineHeight: 1.6, mt: 0.25, fontWeight: 700 }}>
-                    {data.title}
+                    {displayData.title}
                   </Typography>
                 </Box>
                 <Box>
@@ -262,7 +279,7 @@ export const DetailDrawer = ({
                     Description
                   </Typography>
                   <Typography variant="body2" sx={{ lineHeight: 1.6, mt: 0.25 }}>
-                    {data.description}
+                    {displayData.description}
                   </Typography>
                 </Box>
               </Stack>
@@ -293,13 +310,13 @@ export const DetailDrawer = ({
 
         <ScheduleChangeModal
           open={scheduleOpen}
-          row={data}
+          row={displayData}
           onClose={() => setScheduleOpen(false)}
           value={nextTime}
           onChange={setNextTime}
           onConfirm={async ({ id }) => {
-            if (!data || !nextTime) return;
-            const scheduledAt = dayjs(`${data.date} ${nextTime}`, 'YYYY-MM-DD HH:mm');
+            if (!displayData || !nextTime) return;
+            const scheduledAt = dayjs(`${displayData.date} ${nextTime}`, 'YYYY-MM-DD HH:mm');
             if (!scheduledAt.isValid()) {
               onShowToast?.({ severity: 'error', message: '시간 형식이 올바르지 않아요.' });
               return;
@@ -330,7 +347,7 @@ export const DetailDrawer = ({
             <>
               정말로 이 예약을 취소할까요?
               <br />
-              #{data.id} · {data.persona} · {data.date} {data.time}
+              #{displayData.id} · {displayData.persona} · {displayData.date} {displayData.time}
             </>
           }
           content={

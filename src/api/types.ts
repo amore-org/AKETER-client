@@ -20,6 +20,8 @@ export interface FailedRecipient {
 export interface TableRowData {
   // 공통
   id: number;
+  /** 상세 조회 API 호출 시 사용하는 예약 ID */
+  messageReservationId?: number;
   persona: string;
   /** 페르소나 상세 드로어 연결용(없으면 persona 문자열을 키로 사용 가능) */
   personaId?: string;
