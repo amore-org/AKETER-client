@@ -208,6 +208,13 @@ export const mapReservationDtoToTableRow = (dto: ReservationSummaryDto | Reserva
   const date = dt.isValid() ? dt.format('YYYY-MM-DD') : '';
   const time = dt.isValid() ? dt.format('HH:mm') : '';
 
+  // 발송 일시가 현재 시간을 지났으면 발송 완료로 표시
+  const isPastScheduledTime = dt.isValid() && dt.isBefore(dayjs());
+  const chipStatus =
+    isPastScheduledTime && (dto.status === 'PENDING' || dto.status === 'READY')
+      ? 'success'
+      : mapStatusToChipStatus(dto.status);
+
   return {
     id: dto.reservationId,
     messageReservationId: dto.messageReservationId,
@@ -219,7 +226,7 @@ export const mapReservationDtoToTableRow = (dto: ReservationSummaryDto | Reserva
     productUrl: buildProductUrl(dto.item?.itemId),
     title: dto.message?.title ?? '',
     description: dto.message?.description ?? '',
-    status: mapStatusToChipStatus(dto.status),
+    status: chipStatus,
     channel: mapChannelLabel(dto.channelType),
     recipientCount: dto.targetCount,
     recommendedReason: 'recommendReason' in dto ? dto.recommendReason : undefined,

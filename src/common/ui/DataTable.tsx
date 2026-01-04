@@ -188,6 +188,38 @@ export const DataTable = ({
     return filteredRows.slice(start, start + pageSize);
   }, [filteredRows, isServerPaging, pageSize, safePage]);
 
+  // personaId로 정렬된 행
+  const sortedPagedRows = useMemo(() => {
+    return [...pagedRows].sort((a, b) => {
+      const aId = a.personaId ?? a.persona;
+      const bId = b.personaId ?? b.persona;
+      if (aId < bId) return -1;
+      if (aId > bId) return 1;
+      return 0;
+    });
+  }, [pagedRows]);
+
+  // 페르소나 병합 정보 계산
+  const personaMergeInfo = useMemo(() => {
+    const info: { rowSpan: number; shouldRender: boolean }[] = [];
+    let i = 0;
+    while (i < sortedPagedRows.length) {
+      const currentPersonaId = sortedPagedRows[i].personaId ?? sortedPagedRows[i].persona;
+      let count = 1;
+      while (i + count < sortedPagedRows.length) {
+        const nextPersonaId = sortedPagedRows[i + count].personaId ?? sortedPagedRows[i + count].persona;
+        if (nextPersonaId !== currentPersonaId) break;
+        count++;
+      }
+      info.push({ rowSpan: count, shouldRender: true });
+      for (let j = 1; j < count; j++) {
+        info.push({ rowSpan: 0, shouldRender: false });
+      }
+      i += count;
+    }
+    return info;
+  }, [sortedPagedRows]);
+
   const handleStatusChange = (e: SelectChangeEvent) => {
     setStatusFilter(e.target.value as 'all' | ChipStatus);
     setActivePage(1);
@@ -622,35 +654,40 @@ export const DataTable = ({
           </TableRow>
         </TableHead>
         <TableBody>
-          {pagedRows.length > 0 ? (
-            pagedRows.map((row) => (
+          {sortedPagedRows.length > 0 ? (
+            sortedPagedRows.map((row, idx) => (
               <StyledRow
                 key={row.id}
                 hover
                 $clickable={Boolean(onRowClick)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
-                <StyledTd sx={{ minWidth: '12rem', fontWeight: 600 }}>
-                  {onPersonaClick ? (
-                    <Tooltip title="페르소나 상세로 이동해요.">
-                      <span>
-                        <AppButton
-                          variant="link"
-                          linkKind="internal"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onPersonaClick(row);
-                          }}
-                          aria-label="페르소나 상세 보기"
-                        >
-                          {row.persona}
-                        </AppButton>
-                      </span>
-                    </Tooltip>
-                  ) : (
-                    row.persona
-                  )}
-                </StyledTd>
+                {personaMergeInfo[idx]?.shouldRender && (
+                  <StyledTd
+                    rowSpan={personaMergeInfo[idx].rowSpan}
+                    sx={{ minWidth: '12rem', fontWeight: 600, verticalAlign: 'middle' }}
+                  >
+                    {onPersonaClick ? (
+                      <Tooltip title="페르소나 상세로 이동해요.">
+                        <span>
+                          <AppButton
+                            variant="link"
+                            linkKind="internal"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onPersonaClick(row);
+                            }}
+                            aria-label="페르소나 상세 보기"
+                          >
+                            {row.persona}
+                          </AppButton>
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      row.persona
+                    )}
+                  </StyledTd>
+                )}
                 <StyledTd sx={{ minWidth: '10rem' }}>
                   {onProductClick ? (
                     <Tooltip title="아모레몰 상품 상세로 이동해요.">
