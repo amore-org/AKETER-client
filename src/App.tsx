@@ -182,6 +182,13 @@ function App() {
         });
     }, [personaProfiles]);
 
+    const uniquePersonaCount = useMemo(() => {
+        const uniqueIds = new Set(trendRows.map((r) => r.personaId).filter(Boolean));
+        return uniqueIds.size;
+    }, [trendRows]);
+
+    const messageCount = trendRows.length;
+
     const handleRowClick = (row: TableRowData) => {
         setSelectedRow(row);
         setDetailInitialDialog(null);
@@ -277,7 +284,8 @@ function App() {
                             <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 0.5 }}>
                                 <Typography variant="h3">CRM 메시지</Typography>
                                 <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-                                    전체 발송 내역을 확인할 수 있어요.
+                                    생성 결과, <br />
+                                    AMORE MALL 사용자 기반 페르소나는 {uniquePersonaCount}건, 총 생성된 발송 메시지는 {messageCount}건입니다.
                                 </Typography>
                             </Box>
 
@@ -307,7 +315,8 @@ function App() {
                                 <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                                     <Typography variant="h3">페르소나 유형</Typography>
                                     <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-                                        페르소나를 선택하면 상세 정보를 확인할 수 있어요!
+                                        AMORE MALL 사용자는, <br />
+                                        {personaRankRows.slice(0, 3).map((r) => r.profile.persona).join(", ")}의 비중이 가장 높습니다.
                                     </Typography>
                                 </Box>
                             </Box>
