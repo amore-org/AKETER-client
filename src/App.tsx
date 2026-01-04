@@ -103,7 +103,7 @@ function App() {
                 const res = await getReservations({
                     scheduledAt: reservationsScheduledAt,
                     page: Math.max(0, reservationsPage - 1),
-                    size: 10,
+                    size: 50,
                 }).catch(async (e) => {
                     // 백엔드가 today 전용 엔드포인트만 제공하는 환경을 위한 fallback
                     if (e instanceof HttpError && e.status === 404) {
@@ -303,7 +303,7 @@ function App() {
                                 page={reservationsPage}
                                 pageCount={reservationsPageCount}
                                 onPageChange={(next) => setReservationsPage(next)}
-                                pageSize={10}
+                                pageSize={50}
                                 variant="trend"
                             />
                         </>
