@@ -27,6 +27,7 @@ export interface TableRowData {
   personaId?: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
+  brand?: string
   product: string;
   /** 상품 상세 이동 링크 */
   productUrl?: string;
