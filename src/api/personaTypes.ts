@@ -83,10 +83,14 @@ const mapPurchaseStyleToKorean = (raw?: string): string | undefined => {
   const v = (raw ?? '').trim();
   if (!v) return undefined;
   switch (v) {
+    case 'INSTANT_BUY':
+      return '즉시 구매형';
     case 'REBUY_AFTER_CONSUME':
-      return '소진 후 재구매';
+      return '필요 시 재구매형';
     case 'COMPARE_THEN_BUY':
-      return '비교 후 구매';
+      return '비교 후 구매형';
+    case 'CART_HOLD_THEN_BUY':
+      return '장바구니 보관 후 구매형';
     default:
       return v;
   }

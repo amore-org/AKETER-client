@@ -284,7 +284,6 @@ function App() {
                             <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 0.5 }}>
                                 <Typography variant="h3">CRM 메시지</Typography>
                                 <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-                                    생성 결과, <br />
                                     AMORE MALL 사용자 기반 페르소나는 {uniquePersonaCount}건, 총 생성된 발송 메시지는 {messageCount}건입니다.
                                 </Typography>
                             </Box>
@@ -315,7 +314,6 @@ function App() {
                                 <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                                     <Typography variant="h3">페르소나 유형</Typography>
                                     <Typography variant="body2" sx={{ color: amoreTokens.colors.gray[600] }}>
-                                        AMORE MALL 사용자는, <br />
                                         {personaRankRows.slice(0, 3).map((r) => r.profile.persona).join(", ")}의 비중이 가장 높습니다.
                                     </Typography>
                                 </Box>
