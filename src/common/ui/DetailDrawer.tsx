@@ -13,6 +13,7 @@ import {
   TextField,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { amoreTokens } from '../../styles/theme';
 import { AppChip, StatusChip } from './Chip';
 import type { TableRowData } from './DataTable';
@@ -50,6 +51,48 @@ const InfoLabel = styled(Typography)`
   min-width: 6.5rem;
   flex: 0 0 auto;
 `;
+
+const ProductLink = styled(AppButton)`
+  && {
+    display: inline !important;
+    text-align: left !important;
+    white-space: normal !important;
+    word-break: keep-all;
+    line-height: 1.4;
+  }
+`;
+
+const ProductLinkIcon = styled(OpenInNewIcon)`
+  && {
+    font-size: 0.85em;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+`;
+
+/** 마지막 N글자와 아이콘을 함께 묶어서 아이콘만 줄바꿈되지 않도록 함 */
+const ProductWithIcon = ({ text }: { text: string }) => {
+  const minChars = 4;
+  if (text.length <= minChars) {
+    return (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        {text}
+        <ProductLinkIcon />
+      </span>
+    );
+  }
+  const leading = text.slice(0, -minChars);
+  const trailing = text.slice(-minChars);
+  return (
+    <>
+      {leading}
+      <span style={{ whiteSpace: 'nowrap' }}>
+        {trailing}
+        <ProductLinkIcon />
+      </span>
+    </>
+  );
+};
 
 interface DetailDrawerProps {
   open: boolean;
@@ -242,13 +285,14 @@ export const DetailDrawer = ({
                 {onProductClick ? (
                   <Tooltip title="아모레몰 상품 상세로 이동해요.">
                     <span>
-                      <AppButton
+                      <ProductLink
                         variant="link"
                         linkKind="external"
+                        endIcon={<></>}
                         onClick={() => onProductClick(displayData)}
                       >
-                        {displayData.product}
-                      </AppButton>
+                        <ProductWithIcon text={displayData.product} />
+                      </ProductLink>
                     </span>
                   </Tooltip>
                 ) : (
