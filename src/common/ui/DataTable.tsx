@@ -74,7 +74,7 @@ interface DataTableProps {
   onPageChange?: (nextPage: number) => void;
 }
 
-type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'channel';
+type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'brand' | 'product' | 'channel';
 
 export const StyledTableContainer = styled(TableContainer)`
   && {
@@ -108,11 +108,35 @@ export const StyledTd = styled(TableCell)`
   }
 `;
 
-export const StyledRow = styled(TableRow)<{ $clickable?: boolean }>`
+export const StyledRow = styled(TableRow)<{ $clickable?: boolean; $groupStart?: boolean }>`
   transition: background-color 0.2s ease;
   cursor: ${({ $clickable }) => ($clickable ? 'pointer' : 'default')};
   &:hover {
     background-color: ${({ $clickable }) => ($clickable ? amoreTokens.colors.blue[50] : 'inherit')} !important;
+  }
+  
+  /* 페르소나 그룹 시작 지점에만 구분선(상단 보더) 진하게 */
+  ${({ $groupStart }) =>
+    $groupStart
+      ? `
+        & > td {
+          border-top: 2px solid ${amoreTokens.colors.navy[100]} !important;
+        }
+      `
+      : ''}
+`;
+
+const ProductLink = styled(AppButton)`
+  && {
+    width: 100%;
+    display: inline-flex;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+
+    white-space: normal !important;   /* 줄바꿈 허용 */
+    word-break: keep-all;            /* 한글 단어 단위로 개행 */
+    line-height: 1.4;
   }
 `;
 
@@ -134,6 +158,7 @@ export const DataTable = ({
   const [timeFilter, setTimeFilter] = useState<string>(''); // HH:mm
   const [statusFilter, setStatusFilter] = useState<'all' | ChipStatus>('all');
   const [personaSelected, setPersonaSelected] = useState<string[]>([]);
+  const [brandSelected, setBrandSelected] = useState<string[]>([]);
   const [productQuery, setProductQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<'all' | string>('all');
   const [page, setPage] = useState(1);
@@ -170,11 +195,12 @@ export const DataTable = ({
         if (row.status !== statusFilter) return false;
       }
       if (personaSelected.length > 0 && !personaSelected.includes(row.persona)) return false;
+      if (brandSelected.length > 0 && !brandSelected.includes((row as any).brand ?? '')) return false;
       if (channelFilter !== 'all' && row.channel !== channelFilter) return false;
       if (productQ && !row.product.toLowerCase().includes(productQ)) return false;
       return true;
     });
-  }, [channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
+  }, [brandSelected, channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
 
   const pageCount = isServerPaging
     ? Math.max(1, controlledPageCount ?? 1)
@@ -228,8 +254,8 @@ export const DataTable = ({
   const popoverOpen = Boolean(popover.key && popover.anchorEl);
   const popoverId = popoverOpen && popover.key ? `datatable-filter-${popover.key}` : undefined;
 
-  // 컬럼 수: 페르소나, 상품명, 채널, 메시지, 발송시간/일시, 상태
-  const emptyColSpan = 6;
+  // 컬럼 수: 페르소나, 브랜드, 상품명, 채널, 메시지, 발송시간/일시, 상태
+  const emptyColSpan = 7;
 
   const headerIconButtonSx = {
     p: 0.25,
@@ -240,6 +266,15 @@ export const DataTable = ({
     const set = new Set<string>();
     rows.forEach((r) => set.add(r.persona));
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [rows]);
+
+  const brandOptions = useMemo(() => {
+  const set = new Set<string>();
+  rows.forEach((r) => {
+    const b = (r as any).brand;        
+    if (b) set.add(b);
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
   }, [rows]);
 
   const channelOptions = useMemo(() => {
@@ -458,6 +493,51 @@ export const DataTable = ({
             </Stack>
           )}
 
+          {popover.key === 'brand' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                브랜드 필터
+              </Typography>
+
+              <Autocomplete
+                multiple
+                disableCloseOnSelect
+                options={brandOptions}
+                value={brandSelected}
+                onChange={(_e, next) => {
+                  setBrandSelected(next);
+                  setActivePage(1);
+                }}
+                size="small"
+                renderInput={(params) => <TextField {...params} label="브랜드" placeholder="검색 후 선택" />}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}>
+                    <Checkbox size="small" sx={{ mr: 1 }} checked={selected} />
+                    <ListItemText primary={option} />
+                  </li>
+                )}
+              />
+
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setBrandSelected([]);
+                    setActivePage(1);
+                  }}
+                  disabled={brandSelected.length === 0}
+                >
+                  초기화
+                </Button>
+                <Button size="small" variant="contained" onClick={closePopover}>
+                  저장
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
           {popover.key === 'channel' && (
             <Stack spacing={1.5}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
@@ -563,6 +643,26 @@ export const DataTable = ({
                 </Tooltip>
               </Stack>
             </StyledTh>
+            
+            {/* 브랜드 컬럼 추가 */}
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">브랜드</Box>
+                <Tooltip title="브랜드 필터">
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('brand')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: brandSelected.length > 0 ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
+                    }}
+                  >
+                    <FilterAltIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </StyledTh>
+
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">상품명</Box>
@@ -660,6 +760,7 @@ export const DataTable = ({
                 key={row.id}
                 hover
                 $clickable={Boolean(onRowClick)}
+                $groupStart={idx > 0 && Boolean(personaMergeInfo[idx]?.shouldRender)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
                 {personaMergeInfo[idx]?.shouldRender && (
@@ -688,11 +789,17 @@ export const DataTable = ({
                     )}
                   </StyledTd>
                 )}
-                <StyledTd sx={{ minWidth: '10rem' }}>
+
+                {/* 브랜드 매 행마다 렌더 */} 
+                <StyledTd sx={{ minWidth: '7rem', whiteSpace: 'nowrap' }}> 
+                  {row.brand ?? '-'} 
+                </StyledTd>
+
+                <StyledTd sx={{ minWidth: '10rem', textAlign: 'left' }}>
                   {onProductClick ? (
                     <Tooltip title="아모레몰 상품 상세로 이동해요.">
-                      <span>
-                        <AppButton
+                      <span style={{ display: 'block', width: '100%', textAlign: 'left' }}>
+                        <ProductLink
                           variant="link"
                           linkKind="external"
                           onClick={(e) => {
@@ -702,13 +809,16 @@ export const DataTable = ({
                           aria-label="상품 상세 보기"
                         >
                           {row.product}
-                        </AppButton>
+                        </ProductLink>
                       </span>
                     </Tooltip>
                   ) : (
-                    row.product
+                    <Box sx={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'keep-all', lineHeight: 1.4 }}>
+                      {row.product}
+                    </Box>
                   )}
                 </StyledTd>
+
                 <StyledTd sx={{ whiteSpace: 'nowrap' }}>
                   {row.channel ? (
                     <AppChip
