@@ -74,7 +74,7 @@ interface DataTableProps {
   onPageChange?: (nextPage: number) => void;
 }
 
-type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'product' | 'channel';
+type FilterPopoverKey = 'date' | 'time' | 'status' | 'persona' | 'brand' | 'product' | 'channel';
 
 export const StyledTableContainer = styled(TableContainer)`
   && {
@@ -134,6 +134,7 @@ export const DataTable = ({
   const [timeFilter, setTimeFilter] = useState<string>(''); // HH:mm
   const [statusFilter, setStatusFilter] = useState<'all' | ChipStatus>('all');
   const [personaSelected, setPersonaSelected] = useState<string[]>([]);
+  const [brandSelected, setBrandSelected] = useState<string[]>([]);
   const [productQuery, setProductQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<'all' | string>('all');
   const [page, setPage] = useState(1);
@@ -170,11 +171,12 @@ export const DataTable = ({
         if (row.status !== statusFilter) return false;
       }
       if (personaSelected.length > 0 && !personaSelected.includes(row.persona)) return false;
+      if (brandSelected.length > 0 && !brandSelected.includes((row as any).brand ?? '')) return false;
       if (channelFilter !== 'all' && row.channel !== channelFilter) return false;
       if (productQ && !row.product.toLowerCase().includes(productQ)) return false;
       return true;
     });
-  }, [channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
+  }, [brandSelected, channelFilter, personaSelected, productQuery, rows, selectedDate, statusFilter, timeFilter, variant]);
 
   const pageCount = isServerPaging
     ? Math.max(1, controlledPageCount ?? 1)
@@ -240,6 +242,15 @@ export const DataTable = ({
     const set = new Set<string>();
     rows.forEach((r) => set.add(r.persona));
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [rows]);
+
+  const brandOptions = useMemo(() => {
+  const set = new Set<string>();
+  rows.forEach((r) => {
+    const b = (r as any).brand;        
+    if (b) set.add(b);
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
   }, [rows]);
 
   const channelOptions = useMemo(() => {
@@ -458,6 +469,51 @@ export const DataTable = ({
             </Stack>
           )}
 
+          {popover.key === 'brand' && (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                브랜드 필터
+              </Typography>
+
+              <Autocomplete
+                multiple
+                disableCloseOnSelect
+                options={brandOptions}
+                value={brandSelected}
+                onChange={(_e, next) => {
+                  setBrandSelected(next);
+                  setActivePage(1);
+                }}
+                size="small"
+                renderInput={(params) => <TextField {...params} label="브랜드" placeholder="검색 후 선택" />}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}>
+                    <Checkbox size="small" sx={{ mr: 1 }} checked={selected} />
+                    <ListItemText primary={option} />
+                  </li>
+                )}
+              />
+
+              <Divider />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setBrandSelected([]);
+                    setActivePage(1);
+                  }}
+                  disabled={brandSelected.length === 0}
+                >
+                  초기화
+                </Button>
+                <Button size="small" variant="contained" onClick={closePopover}>
+                  저장
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
           {popover.key === 'channel' && (
             <Stack spacing={1.5}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
@@ -568,6 +624,18 @@ export const DataTable = ({
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">브랜드</Box>
+                <Tooltip title="브랜드 필터">
+                  <IconButton
+                    size="small"
+                    onClick={openPopover('brand')}
+                    sx={{
+                      ...headerIconButtonSx,
+                      color: brandSelected.length > 0 ? amoreTokens.colors.brand.amoreBlue : amoreTokens.colors.gray[500],
+                    }}
+                  >
+                    <FilterAltIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
               </Stack>
             </StyledTh>
 
