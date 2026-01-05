@@ -108,12 +108,22 @@ export const StyledTd = styled(TableCell)`
   }
 `;
 
-export const StyledRow = styled(TableRow)<{ $clickable?: boolean }>`
+export const StyledRow = styled(TableRow)<{ $clickable?: boolean; $groupStart?: boolean }>`
   transition: background-color 0.2s ease;
   cursor: ${({ $clickable }) => ($clickable ? 'pointer' : 'default')};
   &:hover {
     background-color: ${({ $clickable }) => ($clickable ? amoreTokens.colors.blue[50] : 'inherit')} !important;
   }
+  
+  /* 페르소나 그룹 시작 지점에만 구분선(상단 보더) 진하게 */
+  ${({ $groupStart }) =>
+    $groupStart
+      ? `
+        & > td {
+          border-top: 2px solid ${amoreTokens.colors.navy[100]} !important;
+        }
+      `
+      : ''}
 `;
 
 const ProductLink = styled(AppButton)`
@@ -750,6 +760,7 @@ export const DataTable = ({
                 key={row.id}
                 hover
                 $clickable={Boolean(onRowClick)}
+                $groupStart={idx > 0 && Boolean(personaMergeInfo[idx]?.shouldRender)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
                 {personaMergeInfo[idx]?.shouldRender && (
@@ -807,7 +818,7 @@ export const DataTable = ({
                     </Box>
                   )}
                 </StyledTd>
-                
+
                 <StyledTd sx={{ whiteSpace: 'nowrap' }}>
                   {row.channel ? (
                     <AppChip
