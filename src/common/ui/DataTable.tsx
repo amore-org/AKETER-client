@@ -228,8 +228,8 @@ export const DataTable = ({
   const popoverOpen = Boolean(popover.key && popover.anchorEl);
   const popoverId = popoverOpen && popover.key ? `datatable-filter-${popover.key}` : undefined;
 
-  // 컬럼 수: 페르소나, 상품명, 채널, 메시지, 발송시간/일시, 상태
-  const emptyColSpan = 6;
+  // 컬럼 수: 페르소나, 브랜드, 상품명, 채널, 메시지, 발송시간/일시, 상태
+  const emptyColSpan = 7;
 
   const headerIconButtonSx = {
     p: 0.25,
@@ -563,6 +563,14 @@ export const DataTable = ({
                 </Tooltip>
               </Stack>
             </StyledTh>
+            
+            {/* 브랜드 컬럼 추가 */}
+            <StyledTh>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box component="span">브랜드</Box>
+              </Stack>
+            </StyledTh>
+
             <StyledTh>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Box component="span">상품명</Box>
@@ -688,6 +696,12 @@ export const DataTable = ({
                     )}
                   </StyledTd>
                 )}
+
+                {/* 브랜드 매 행마다 렌더 */} 
+                <StyledTd sx={{ minWidth: '7rem', whiteSpace: 'nowrap' }}> 
+                  {row.brand ?? '-'} 
+                </StyledTd>
+
                 <StyledTd sx={{ minWidth: '10rem' }}>
                   {onProductClick ? (
                     <Tooltip title="아모레몰 상품 상세로 이동해요.">

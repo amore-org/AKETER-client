@@ -66,6 +66,7 @@ export interface ReservationDetailServer {
     id: number;
     itemKey: string;
     name: string;
+    brandName?: string;
   };
   message: {
     id: number;
@@ -93,6 +94,7 @@ export interface ReservationItemDto {
   itemId: number;
   itemKey: string;
   name: string;
+  brandName?: string;
 }
 
 export interface ReservationSummaryDto {
@@ -169,6 +171,7 @@ export const mapReservationRowServerToDto = (row: ReservationRowServer): Reserva
     itemId: row.itemId,
     itemKey: row.itemKey,
     name: row.itemName,
+    brandName: row.brandName,
   },
   message: {
     messageId: row.messageId,
@@ -190,6 +193,7 @@ export const mapDetailServerToDto = (d: ReservationDetailServer): ReservationDet
     itemId: d.item.id,
     itemKey: d.item.itemKey,
     name: d.item.name,
+    brandName: d.item.brandName,
   },
   message: {
     messageId: d.message.id,
@@ -222,6 +226,7 @@ export const mapReservationDtoToTableRow = (dto: ReservationSummaryDto | Reserva
     personaId: String(dto.personaId),
     date,
     time,
+    brand: dto.item?.brandName ?? '-',
     product: dto.item?.name ?? '-',
     productUrl: buildProductUrl(dto.item?.itemId),
     title: dto.message?.title ?? '',
