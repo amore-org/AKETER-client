@@ -116,6 +116,20 @@ export const StyledRow = styled(TableRow)<{ $clickable?: boolean }>`
   }
 `;
 
+const ProductLink = styled(AppButton)`
+  && {
+    width: 100%;
+    display: inline-flex;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+
+    white-space: normal !important;   /* 줄바꿈 허용 */
+    word-break: keep-all;            /* 한글 단어 단위로 개행 */
+    line-height: 1.4;
+  }
+`;
+
 export const DataTable = ({
   rows,
   onRowClick,
@@ -770,11 +784,11 @@ export const DataTable = ({
                   {row.brand ?? '-'} 
                 </StyledTd>
 
-                <StyledTd sx={{ minWidth: '10rem' }}>
+                <StyledTd sx={{ minWidth: '10rem', textAlign: 'left' }}>
                   {onProductClick ? (
                     <Tooltip title="아모레몰 상품 상세로 이동해요.">
-                      <span>
-                        <AppButton
+                      <span style={{ display: 'block', width: '100%', textAlign: 'left' }}>
+                        <ProductLink
                           variant="link"
                           linkKind="external"
                           onClick={(e) => {
@@ -784,13 +798,16 @@ export const DataTable = ({
                           aria-label="상품 상세 보기"
                         >
                           {row.product}
-                        </AppButton>
+                        </ProductLink>
                       </span>
                     </Tooltip>
                   ) : (
-                    row.product
+                    <Box sx={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'keep-all', lineHeight: 1.4 }}>
+                      {row.product}
+                    </Box>
                   )}
                 </StyledTd>
+                
                 <StyledTd sx={{ whiteSpace: 'nowrap' }}>
                   {row.channel ? (
                     <AppChip
