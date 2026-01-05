@@ -34,6 +34,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import EventIcon from '@mui/icons-material/Event';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { TableRowData } from '../../api/types';
 import { Button as AppButton } from './Button';
 import { Popover } from './Popover';
@@ -128,17 +129,45 @@ export const StyledRow = styled(TableRow)<{ $clickable?: boolean; $groupStart?: 
 
 const ProductLink = styled(AppButton)`
   && {
-    width: 100%;
-    display: inline-flex;
-    justify-content: flex-start !important;
-    align-items: flex-start !important;
+    display: inline !important;      /* 멀티라인에서 아이콘이 마지막 글자 옆에 위치 */
     text-align: left !important;
-
     white-space: normal !important;   /* 줄바꿈 허용 */
     word-break: keep-all;            /* 한글 단어 단위로 개행 */
     line-height: 1.4;
   }
 `;
+
+const ProductLinkIcon = styled(OpenInNewIcon)`
+  && {
+    font-size: 0.85em;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+`;
+
+/** 마지막 N글자와 아이콘을 함께 묶어서 아이콘만 줄바꿈되지 않도록 함 */
+const ProductWithIcon = ({ text }: { text: string }) => {
+  const minChars = 4;
+  if (text.length <= minChars) {
+    return (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        {text}
+        <ProductLinkIcon />
+      </span>
+    );
+  }
+  const leading = text.slice(0, -minChars);
+  const trailing = text.slice(-minChars);
+  return (
+    <>
+      {leading}
+      <span style={{ whiteSpace: 'nowrap' }}>
+        {trailing}
+        <ProductLinkIcon />
+      </span>
+    </>
+  );
+};
 
 export const DataTable = ({
   rows,
@@ -802,13 +831,14 @@ export const DataTable = ({
                         <ProductLink
                           variant="link"
                           linkKind="external"
+                          endIcon={<></>}
                           onClick={(e) => {
                             e.stopPropagation();
                             onProductClick(row);
                           }}
                           aria-label="상품 상세 보기"
                         >
-                          {row.product}
+                          <ProductWithIcon text={row.product} />
                         </ProductLink>
                       </span>
                     </Tooltip>
